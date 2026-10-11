@@ -29,11 +29,17 @@ object SafeUrl {
             val probe = "http://$raw".toHttpUrlOrNull() ?: throw SloplexException(ErrorKind.INVALID_URL, "Enter a valid server address.")
             val literal = probe.host.matches(Regex("[0-9.]+")) || ':' in probe.host
             val local = literal && runCatching { isPrivate(InetAddress.getByName(probe.host)) }.getOrDefault(false)
-            probe.newBuilder().scheme(if (local) "http" else "https").port(if (!(':' in raw && raw.substringAfterLast(':').toIntOrNull()!=null)) 32400 else probe.port).build()
+            val explicitPort = probe.port != 80 || Regex(":80(/|$)").containsMatchIn(raw)
+            // Only the LAN HTTP listener defaults to 32400; HTTPS hostnames (Tailscale Serve, reverse proxies) use 443.
+            probe.newBuilder().scheme(if (local) "http" else "https").port(if (explicitPort) probe.port else if (local) 32400 else 443).build()
         } ?: throw SloplexException(ErrorKind.INVALID_URL, "Use an HTTP or HTTPS server URL.")
-        if (url.username.isNotEmpty() || url.password.isNotEmpty() || url.query != null || url.fragment != null || url.encodedPath != "/")
+        if (url.username.isNotEmpty() || url.password.isNotEmpty())
             throw SloplexException(ErrorKind.INVALID_URL, "Use the server origin without credentials, a path, or query parameters.")
-        return url
+        // Accept the web app address copied from a browser (e.g. https://host/web/index.html#!/) and keep only its origin.
+        val webApp = url.encodedPath == "/web" || url.encodedPath.startsWith("/web/")
+        if (!webApp && (url.query != null || url.fragment != null || url.encodedPath != "/"))
+            throw SloplexException(ErrorKind.INVALID_URL, "Use the server origin without credentials, a path, or query parameters.")
+        return if (webApp) url.newBuilder().encodedPath("/").query(null).fragment(null).build() else url
     }
     fun sameOrigin(a: HttpUrl, b: HttpUrl) = a.scheme == b.scheme && a.host == b.host && a.port == b.port
     fun resolve(base: HttpUrl, path: String): HttpUrl {

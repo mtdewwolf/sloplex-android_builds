@@ -17,7 +17,7 @@ Configure the SDK through `ANDROID_HOME` or an untracked `android/local.properti
 
 ## Connect
 
-Start a Sloplex server and configure a local account with a password in its web app. Use HTTPS for remote access, including Tailscale Serve. On a private LAN, enter an IP and port (default 32400) and explicitly enable local HTTP. The apps never import an owner recovery token.
+Start a Sloplex server and configure a local account with a password in its web app. Use HTTPS for remote access, including Tailscale Serve: enter the hostname (for example `sloplex.<tailnet>.ts.net`) or paste the browser address — a trailing `/web/` path is dropped and HTTPS hostnames default to port 443. On a private LAN, enter an IP and port (default 32400) and explicitly enable local HTTP. The apps never import an owner recovery token.
 
 Discovery uses GDM multicast/broadcast searches on UDP 32414, not mDNS. Discovered addresses must still pass `/identity` validation. A saved server's machine identity is checked before reusing credentials.
 
