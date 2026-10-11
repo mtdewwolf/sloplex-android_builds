@@ -1,0 +1,167 @@
+name: Phone APK release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing version tag to release (for example v0.1.0-alpha02)'
+        required: true
+        type: string
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - 'android/app-mobile/build.gradle.kts'
+      - 'android/scripts/sign-phone-apk.sh'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phone-release-${{ github.event.inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - name: Validate version
+        id: version
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_TAG: ${{ github.ref_name }}
+          RUN_NUMBER: ${{ github.run_number }}
+        shell: bash
+        run: |
+          if [[ "$EVENT" == pull_request ]]; then
+            tag=v0.0.0-ci
+          else
+            tag=${INPUT_TAG:-$REF_TAG}
+          fi
+          if [[ ! "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+            echo "Expected a version tag such as v0.1.0-alpha02" >&2
+            exit 1
+          fi
+          prerelease=false
+          [[ "$tag" != *-* ]] || prerelease=true
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "name=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "code=$((1000 + RUN_NUMBER))" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+      - name: Check signing secrets
+        if: github.event_name != 'pull_request'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [[ -z ${!name} ]]; then
+              echo "Missing GitHub Actions secret: $name" >&2
+              exit 1
+            fi
+          done
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.ref || format('refs/tags/{0}', steps.version.outputs.tag) }}
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Test, lint and build phone release
+        working-directory: android
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+        run: |
+          ./gradlew :core:model:test :core:network:test :app-mobile:lintRelease :app-mobile:assembleRelease \
+            "-PsloplexVersionName=$VERSION_NAME" "-PsloplexVersionCode=$VERSION_CODE"
+      - name: Sign and verify APK
+        env:
+          EVENT: ${{ github.event_name }}
+          ANDROID_KEYSTORE_BASE64: ${{ github.event_name != 'pull_request' && secrets.ANDROID_KEYSTORE_BASE64 || '' }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.ANDROID_KEYSTORE_PASSWORD || '' }}
+          ANDROID_KEY_ALIAS: ${{ github.event_name != 'pull_request' && secrets.ANDROID_KEY_ALIAS || '' }}
+          ANDROID_KEY_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.ANDROID_KEY_PASSWORD || '' }}
+        run: |
+          if [[ "$EVENT" == pull_request ]]; then
+            # Exercise packaging with an ephemeral test key; never use release secrets on PRs.
+            test_key="$RUNNER_TEMP/phone-test.jks"
+            trap 'rm -f "$test_key"' EXIT
+            keytool -genkeypair -keystore "$test_key" -storetype JKS -alias test \
+              -storepass test-password -keypass test-password -keyalg RSA -keysize 2048 \
+              -validity 1 -dname "CN=CI test only" -noprompt
+            export ANDROID_KEYSTORE_BASE64="$(base64 -w 0 "$test_key")"
+            export ANDROID_KEYSTORE_PASSWORD=test-password
+            export ANDROID_KEY_ALIAS=test
+            export ANDROID_KEY_PASSWORD=test-password
+          fi
+          bash android/scripts/sign-phone-apk.sh \
+            android/app-mobile/build/outputs/apk/release/app-mobile-release-unsigned.apk \
+            dist/Sloplex-phone.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phone-release-apk
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phone-release-reports
+          path: |
+            android/**/build/reports/**
+            android/**/build/test-results/**
+          retention-days: 14
+
+  publish:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: phone-release-apk
+          path: dist
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.build.outputs.tag }}
+          PRERELEASE: ${{ needs.build.outputs.prerelease }}
+        run: |
+          cd dist
+          sha256sum --check Sloplex-phone.apk.sha256
+          if draft=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null); then
+            if [[ "$draft" != true ]]; then
+              echo "Release $TAG is already published; create a new version tag." >&2
+              exit 1
+            fi
+            gh release upload "$TAG" Sloplex-phone.apk Sloplex-phone.apk.sha256 --clobber
+          else
+            gh release create "$TAG" Sloplex-phone.apk Sloplex-phone.apk.sha256 \
+              --verify-tag --draft --title "Sloplex phone $TAG" --generate-notes
+          fi
+          latest=true
+          [[ "$PRERELEASE" != true ]] || latest=false
+          gh release edit "$TAG" --draft=false "--prerelease=$PRERELEASE" "--latest=$latest"
+          {
+            echo "## Phone APK"
+            echo "[Download Sloplex-phone.apk](https://github.com/$GH_REPO/releases/download/$TAG/Sloplex-phone.apk)"
+          } >> "$GITHUB_STEP_SUMMARY"
