@@ -190,6 +190,7 @@ import coil.request.ImageRequest
     }
 }
 @Composable private fun TvPlayer(vm: SessionViewModel,p: PlayerState) {
+    val player = vm.engine.player
     var options by remember { mutableStateOf(false) }; var lastKey by remember { mutableLongStateOf(0) }
     val first=remember { FocusRequester() }
     LaunchedEffect(p.item?.ratingKey) { first.requestFocus() }
@@ -200,7 +201,7 @@ import coil.request.ImageRequest
             else -> false
         }
     }) {
-        AndroidView(factory={PlayerView(it).apply { useController=false;keepScreenOn=true;isFocusable=false;isFocusableInTouchMode=false }},update={it.player=vm.engine.player},modifier=Modifier.fillMaxSize())
+        AndroidView(factory={PlayerView(it).apply { useController=false;keepScreenOn=true;isFocusable=false;isFocusableInTouchMode=false;setEnableComposeSurfaceSyncWorkaround(true) }},update={it.player=player},onRelease={it.player=null},modifier=Modifier.fillMaxSize())
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color(0xdc101b2b)).padding(32.dp),verticalArrangement=Arrangement.spacedBy(20.dp)) {
             Text(p.item?.title.orEmpty(),style=MaterialTheme.typography.headlineSmall)
             Text("${p.positionMs/60000}:${(p.positionMs/1000%60).toString().padStart(2,'0')} / ${p.durationMs/60000} min · ${p.mode ?: "Preparing"}${if(p.buffering) " · Buffering" else ""}")

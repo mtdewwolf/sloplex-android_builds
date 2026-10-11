@@ -1,8 +1,13 @@
+@file:androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 package app.sloplex.mobile
 
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.lifecycle.ViewModelProvider
+import androidx.test.platform.app.InstrumentationRegistry
+import app.sloplex.feature.session.SessionViewModel
 import okhttp3.mockwebserver.*
+import okio.Buffer
 import org.junit.*
 import org.junit.Assert.*
 
@@ -11,10 +16,26 @@ class ConnectionFlowTest {
     private lateinit var server: MockWebServer
     @Before fun setup() {
         server=MockWebServer()
+        val mp4=InstrumentationRegistry.getInstrumentation().context.assets.open("test.mp4").use { it.readBytes() }
         val watched=java.util.concurrent.atomic.AtomicBoolean(false)
         server.dispatcher=object: Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 val path=request.path!!.substringBefore('?')
+                if(path=="/library/parts/11/1/test.mp4") {
+                    val range=request.getHeader("Range")
+                    val start=range?.substringAfter("bytes=")?.substringBefore('-')?.toIntOrNull() ?: 0
+                    val end=range?.substringAfter('-')?.toIntOrNull()?.coerceAtMost(mp4.lastIndex) ?: mp4.lastIndex
+                    return MockResponse().setResponseCode(if(range!=null) 206 else 200)
+                        .setHeader("Content-Type","video/mp4").setHeader("Accept-Ranges","bytes")
+                        .apply { if(range!=null) setHeader("Content-Range","bytes $start-$end/${mp4.size}") }
+                        .setBody(Buffer().write(mp4.copyOfRange(start,end+1)))
+                }
+                if(path.endsWith("/decision")) {
+                    // Keep the player screen visible with a null player before async preparation completes.
+                    return MockResponse().setHeader("Content-Type","application/json")
+                        .setBody("""{"MediaContainer":{"generalDecisionCode":1000}}""")
+                        .setBodyDelay(500,java.util.concurrent.TimeUnit.MILLISECONDS)
+                }
                 val body=when(path) {
                     "/identity" -> """{"MediaContainer":{"size":0,"machineIdentifier":"test-ui","version":"0.0.1"}}"""
                     "/sloplex/auth/login" -> """{"account":{"id":2,"name":"alice","admin":false},"token":{"id":5,"device":"UI test","token":"test-device-token"}}"""
@@ -48,6 +69,20 @@ class ConnectionFlowTest {
         compose.waitUntil(45000) { compose.onAllNodesWithText("Mark watched").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Mark watched").performClick()
         compose.waitUntil(45000) { compose.onAllNodesWithText("Mark unwatched").fetchSemanticsNodes().isNotEmpty() }
+        lateinit var vm: SessionViewModel
+        compose.runOnUiThread { vm=ViewModelProvider(compose.activity)[SessionViewModel::class.java] }
+        compose.onNodeWithText("Play",substring=false).performScrollTo().performClick()
+        // Advancing audio/time alone must not pass: the actual Compose player view must render video.
+        compose.waitUntil(30000) {
+            var rendered=false
+            compose.runOnUiThread {
+                assertNull(vm.playback.value.error)
+                rendered=(vm.engine.player?.videoDecoderCounters?.renderedOutputBufferCount ?: 0)>0
+            }
+            rendered
+        }
+        compose.onNodeWithContentDescription("Close player").performClick()
+        compose.waitUntil(30000) { compose.onAllNodesWithText("Mark unwatched").fetchSemanticsNodes().isNotEmpty() }
         compose.activityRule.scenario.recreate()
         compose.waitUntil(45000) { compose.onAllNodesWithText("Mark unwatched").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("Back").performClick()

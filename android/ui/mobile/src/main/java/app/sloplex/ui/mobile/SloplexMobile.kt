@@ -199,10 +199,12 @@ private val colors=darkColorScheme(primary=Color(0xff55e6c1),secondary=Color(0xf
     }
 }
 @Composable private fun MobilePlayer(vm: SessionViewModel,p: PlayerState) {
+    // Read the player during composition so AndroidView updates when async preparation replaces it.
+    val player = vm.engine.player
     var menus by remember { mutableStateOf(false) }; var position by remember { mutableFloatStateOf(p.positionMs.toFloat()) }; var dragging by remember { mutableStateOf(false) }
     LaunchedEffect(p.positionMs) { if(!dragging) position=p.positionMs.toFloat() }
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        AndroidView(factory={PlayerView(it).apply { useController=false;keepScreenOn=true }},update={it.player=vm.engine.player},modifier=Modifier.fillMaxSize())
+        AndroidView(factory={PlayerView(it).apply { useController=false;keepScreenOn=true;setEnableComposeSurfaceSyncWorkaround(true) }},update={it.player=player},onRelease={it.player=null},modifier=Modifier.fillMaxSize())
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp),verticalArrangement=Arrangement.SpaceBetween) {
             Row(verticalAlignment=Alignment.CenterVertically) { FilledTonalIconButton(onClick=vm::back) { Icon(Icons.AutoMirrored.Filled.ArrowBack,"Close player") }; Text(p.item?.title.orEmpty(),Modifier.padding(12.dp),style=MaterialTheme.typography.titleMedium) }
             Surface(color=Color(0xd9101b2b)) { Column(Modifier.padding(16.dp)) {
