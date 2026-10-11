@@ -34,6 +34,8 @@ For example, send the encoded keystore directly to GitHub using the CLI, without
 base64 < /path/to/sloplex.jks | tr -d '\n' | gh secret set ANDROID_KEYSTORE_BASE64 --repo mtdewwolf/sloplex-android_builds
 ```
 
+Encode the actual keystore file, rather than its filename, certificate, or a sample value. The workflow opens the keystore and verifies its alias and both passwords before starting the Android build. If this check fails, replace the affected secrets and rerun the failed workflow from its run page.
+
 Keep using and backing up that same key for future releases. A release signed with a different key from the installed debug APK requires a one-time uninstall; subsequent releases with the same key can update normally. APK version names come from tags and version codes are `1000 +` the release workflow run number, so publish versions in order and keep this workflow's run history.
 
 Every push to `Master` automatically publishes an alpha APK as `v0.1.0-alpha.<run number>`. No manual tag creation is needed. For a named release, use **Actions → Phone APK release → Run workflow**, select `Master`, and enter a version such as `0.2.0` or `v0.1.0-alpha02`. The `v` prefix is optional; leaving the version blank creates another automatic alpha release. New versions build the selected branch's commit and create the release tag automatically after a successful build.

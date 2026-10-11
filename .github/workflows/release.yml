@@ -15,6 +15,7 @@ on:
       - '.github/workflows/release.yml'
       - 'android/app-mobile/build.gradle.kts'
       - 'android/scripts/sign-phone-apk.sh'
+      - 'android/scripts/check-phone-signing.sh'
 
 permissions:
   contents: read
@@ -99,6 +100,14 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Verify signing key before building
+        if: github.event_name != 'pull_request'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: bash android/scripts/check-phone-signing.sh
       - uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
@@ -130,6 +139,7 @@ jobs:
             export ANDROID_KEYSTORE_PASSWORD=test-password
             export ANDROID_KEY_ALIAS=test
             export ANDROID_KEY_PASSWORD=test-password
+            bash android/scripts/check-phone-signing.sh
           fi
           bash android/scripts/sign-phone-apk.sh \
             android/app-mobile/build/outputs/apk/release/app-mobile-release-unsigned.apk \
