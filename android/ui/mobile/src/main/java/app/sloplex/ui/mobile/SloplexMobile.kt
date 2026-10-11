@@ -19,6 +19,9 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
@@ -46,6 +49,7 @@ import app.sloplex.feature.session.*
 import coil.ImageLoader
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import kotlinx.coroutines.delay
 
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
@@ -396,26 +400,54 @@ private fun mediaMetadata(item: MediaItem) = listOfNotNull(item.year.takeIf { it
     // Read the player during composition so AndroidView updates when async preparation replaces it.
     val player = vm.engine.player
     var menus by remember { mutableStateOf(false) }; var position by remember { mutableFloatStateOf(p.positionMs.toFloat()) }; var dragging by remember { mutableStateOf(false) }
+    var controlsAlpha by remember { mutableFloatStateOf(1f) }
+    var touchSequence by remember { mutableIntStateOf(0) }
+    var touching by remember { mutableStateOf(false) }
+    LaunchedEffect(touchSequence, touching, dragging, menus, p.error, p.item?.ratingKey) {
+        controlsAlpha = 1f
+        if (!touching && !dragging && !menus && p.error == null) {
+            delay(5_000)
+            controlsAlpha = 0.35f
+            delay(5_000)
+            controlsAlpha = 0f
+        }
+    }
     LaunchedEffect(p.positionMs) { if(!dragging) position=p.positionMs.toFloat() }
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(factory={PlayerView(it).apply { useController=false;keepScreenOn=true;setEnableComposeSurfaceSyncWorkaround(true) }},update={it.player=player},onRelease={it.player=null},modifier=Modifier.fillMaxSize())
-        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp),verticalArrangement=Arrangement.SpaceBetween) {
-            Row(verticalAlignment=Alignment.CenterVertically) { FilledTonalIconButton(onClick=vm::back) { Icon(Icons.AutoMirrored.Filled.ArrowBack,"Close player") }; Text(p.item?.title.orEmpty(),Modifier.padding(12.dp),style=MaterialTheme.typography.titleMedium) }
-            Surface(color=SloplexPalette.Surface.copy(alpha=0.94f),shape=MaterialTheme.shapes.large) { Column(Modifier.padding(16.dp)) {
-                if(p.buffering) LinearProgressIndicator(Modifier.fillMaxWidth())
-                p.syncError?.let { Text(it,style=MaterialTheme.typography.bodySmall) }
-            p.error?.let { Text(it); Button(onClick=vm::retryPlayback) { Text("Retry playback") } }
-                Slider(value=position.coerceIn(0f,p.durationMs.coerceAtLeast(1).toFloat()),onValueChange={dragging=true;position=it},onValueChangeFinished={dragging=false;vm.seek(position.toLong())},valueRange=0f..p.durationMs.coerceAtLeast(1).toFloat())
-                Text("${clock(p.positionMs)} / ${clock(p.durationMs)} · ${p.mode ?: "Preparing"}")
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically) {
-                    IconButton(onClick={vm.seek(p.positionMs-10000)}) { Text("−10") }
-                    FilledIconButton(onClick={vm.engine.toggle()},modifier=Modifier.size(56.dp)) { Icon(if(p.playing) PauseIcon else Icons.Default.PlayArrow,if(p.playing) "Pause" else "Play") }
-                    IconButton(onClick={vm.seek(p.positionMs+30000)}) { Text("+30") }
-                    IconButton(onClick={menus=true}) { Icon(Icons.Default.Settings,"Audio, subtitles, and quality") }
+        // Keep a touch target above the video even when the controls are removed.
+        Box(Modifier.fillMaxSize().pointerInput(Unit) {
+            awaitPointerEventScope {
+                while (true) {
+                    // Observe before buttons/slider consume input without consuming it ourselves.
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    touching = event.changes.any { it.pressed }
+                    touchSequence++
+                    controlsAlpha = 1f
                 }
-            } }
+            }
+        }) {
+            if (controlsAlpha > 0f) {
+                Column(Modifier.fillMaxSize().alpha(controlsAlpha).windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp),verticalArrangement=Arrangement.SpaceBetween) {
+                    Row(verticalAlignment=Alignment.CenterVertically) { FilledTonalIconButton(onClick=vm::back) { Icon(Icons.AutoMirrored.Filled.ArrowBack,"Close player") }; Text(p.item?.title.orEmpty(),Modifier.padding(12.dp),style=MaterialTheme.typography.titleMedium) }
+                    Surface(color=SloplexPalette.Surface.copy(alpha=0.94f),shape=MaterialTheme.shapes.large) { Column(Modifier.padding(16.dp)) {
+                        if(p.buffering) LinearProgressIndicator(Modifier.fillMaxWidth())
+                        p.syncError?.let { Text(it,style=MaterialTheme.typography.bodySmall) }
+                    p.error?.let { Text(it); Button(onClick=vm::retryPlayback) { Text("Retry playback") } }
+                        Slider(value=position.coerceIn(0f,p.durationMs.coerceAtLeast(1).toFloat()),onValueChange={dragging=true;position=it},onValueChangeFinished={dragging=false;vm.seek(position.toLong())},valueRange=0f..p.durationMs.coerceAtLeast(1).toFloat())
+                        Text("${clock(p.positionMs)} / ${clock(p.durationMs)} · ${p.mode ?: "Preparing"}")
+                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically) {
+                            IconButton(onClick={vm.seek(p.positionMs-10000)}) { Text("−10") }
+                            FilledIconButton(onClick={vm.engine.toggle()},modifier=Modifier.size(56.dp)) { Icon(if(p.playing) PauseIcon else Icons.Default.PlayArrow,if(p.playing) "Pause" else "Play") }
+                            IconButton(onClick={vm.seek(p.positionMs+30000)}) { Text("+30") }
+                            IconButton(onClick={menus=true}) { Icon(Icons.Default.Settings,"Audio, subtitles, and quality") }
+                        }
+                    } }
+                }
+            }
         }
     }
+
     if(menus) AlertDialog(onDismissRequest={menus=false},confirmButton={TextButton(onClick={menus=false}) { Text("Done") }},title={Text("Playback options")},text={ Column(Modifier.verticalScroll(rememberScrollState())) {
         val streams=p.item?.versions?.getOrNull(p.mediaIndex)?.parts?.flatMap { it.streams }.orEmpty()
         Text("Audio"); streams.filter { it.streamType==2 }.forEach { stream -> TextButton(onClick={vm.track(audio=stream.id);menus=false}) { Text(stream.displayTitle) } }
