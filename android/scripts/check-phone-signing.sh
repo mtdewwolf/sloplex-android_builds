@@ -11,7 +11,7 @@ done
 key_file=$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/sloplex-key-check.XXXXXX")
 csr_file=$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/sloplex-csr-check.XXXXXX")
 trap 'rm -f "$key_file" "$csr_file"' EXIT
-if ! printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$key_file" 2>/dev/null; then
+if ! printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode > "$key_file" 2>/dev/null; then
   echo "ANDROID_KEYSTORE_BASE64 is not valid Base64. Encode the entire keystore file and upload it again." >&2
   exit 1
 fi
