@@ -2,6 +2,7 @@ package app.sloplex.tv
 
 import androidx.compose.ui.test.*
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import okhttp3.mockwebserver.*
 import org.junit.*
@@ -36,8 +37,7 @@ class ConnectionFlowTest {
         node.performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         compose.waitForIdle()
         node.assertIsFocused()
-        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
-            .sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+        node.performKeyInput { pressKey(Key.DirectionCenter) }
         compose.waitForIdle()
     }
     @Test fun connectionLoginNavigationAndLogout() {
@@ -52,7 +52,7 @@ class ConnectionFlowTest {
         compose.onNodeWithText("Password").performImeAction()
         compose.waitUntil(45000) { compose.onAllNodesWithText("Tonight starts here").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Home").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
-        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_DOWN)
+        compose.onNodeWithText("Home").performKeyInput { pressKey(Key.DirectionDown) }
         compose.onNodeWithText("Movies").assertIsFocused()
         pressRemote(compose.onNodeWithText("Movies"))
         compose.waitUntil(45000) { compose.onAllNodesWithText("Fixture movie").fetchSemanticsNodes().isNotEmpty() }
