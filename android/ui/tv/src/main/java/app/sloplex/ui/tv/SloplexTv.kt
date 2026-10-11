@@ -157,6 +157,7 @@ private val tvColors = darkColorScheme(
 }
 
 @Composable private fun TvConnection(s: AppState, vm: SessionViewModel) {
+    val keyboard = LocalSoftwareKeyboardController.current
     var url by rememberSaveable { mutableStateOf("") }
     var local by rememberSaveable { mutableStateOf(false) }
     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(48.dp)) {
@@ -168,7 +169,7 @@ private val tvColors = darkColorScheme(
         }
         LazyColumn(Modifier.weight(1.15f).imePadding(), verticalArrangement = Arrangement.spacedBy(18.dp), contentPadding = PaddingValues(12.dp)) {
             item { TvHeading("Connect a server", "HTTPS for remote access. Private IP for your LAN.") }
-            item { OutlinedTextField(url, { url = it }, label = { androidx.compose.material3.Text("Server URL") }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)) }
+            item { OutlinedTextField(url, { url = it }, label = { androidx.compose.material3.Text("Server URL") }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { keyboard?.hide() })) }
             item { Button(onClick = { local = !local }) { Text(if (local) "Private LAN HTTP allowed" else "Enable private LAN HTTP") }; Text("HTTP sends credentials unencrypted on your LAN. Use HTTPS for remote access.", Modifier.padding(top = 10.dp), style = MaterialTheme.typography.bodySmall, color = SloplexPalette.Muted) }
             item { Button(onClick = { vm.connect(url, local) }, enabled = url.isNotBlank() && !s.busy, modifier = Modifier.fillMaxWidth(), scale = ButtonDefaults.scale(focusedScale = 1f)) { Text("Connect") } }
             if (s.profiles.isNotEmpty()) item { Text("Saved servers", style = MaterialTheme.typography.titleLarge) }

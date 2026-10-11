@@ -31,10 +31,21 @@ class ConnectionFlowTest {
         server.start()
     }
     @After fun cleanup() { server.shutdown() }
+    // TV Material surfaces respond to remote keys rather than injected touch taps.
+    private fun pressRemote(node: SemanticsNodeInteraction) {
+        node.performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        compose.waitForIdle()
+        node.assertIsFocused()
+        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+            .sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+        compose.waitForIdle()
+    }
     @Test fun connectionLoginNavigationAndLogout() {
         compose.onNodeWithText("Server URL").performTextInput(server.url("/").toString())
-        compose.onNodeWithText("Enable private LAN HTTP").performClick()
-        compose.onNodeWithText("Connect",useUnmergedTree=true).performClick()
+        compose.onNodeWithText("Server URL").performImeAction()
+        pressRemote(compose.onNodeWithText("Enable private LAN HTTP"))
+        compose.onNodeWithText("Private LAN HTTP allowed").assertExists()
+        pressRemote(compose.onNodeWithText("Connect").performScrollTo())
         compose.waitUntil(45000) { compose.onAllNodesWithText("Username").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Username").performTextInput("alice")
         compose.onNodeWithText("Password").performTextInput("wonderland")
@@ -43,14 +54,14 @@ class ConnectionFlowTest {
         compose.onNodeWithText("Home").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_DOWN)
         compose.onNodeWithText("Movies").assertIsFocused()
-        compose.onAllNodesWithText("Movies",useUnmergedTree=true).onLast().performClick()
+        pressRemote(compose.onNodeWithText("Movies"))
         compose.waitUntil(45000) { compose.onAllNodesWithText("Fixture movie").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Fixture movie").performClick()
+        pressRemote(compose.onNodeWithText("Fixture movie"))
         compose.waitUntil(45000) { compose.onAllNodesWithText("Mark watched").fetchSemanticsNodes().isNotEmpty() }
         androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
-        compose.onNodeWithText("Settings",useUnmergedTree=true).performClick()
+        pressRemote(compose.onNodeWithText("Settings"))
         compose.waitUntil(45000) { compose.onAllNodesWithText("Sign out",useUnmergedTree=true).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Sign out",useUnmergedTree=true).performClick()
+        pressRemote(compose.onNodeWithText("Sign out"))
         compose.waitUntil(45000) { compose.onAllNodesWithText("Username").fetchSemanticsNodes().isNotEmpty() }
     }
 }
