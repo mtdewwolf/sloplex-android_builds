@@ -1,5 +1,39 @@
-# Sloplex Android auth and playback core
+# Sloplex for Android
 
-PR 3 adds Keystore device-token storage, validated sessions, account-partitioned Room metadata caching, shared Media3 direct/HLS playback, source timeline offsets, progress reporting and stream/session management. Mobile and TV browsing/player UI follow in PR 4.
+Native Kotlin clients for phones, tablets, foldables, and Android TV. The existing [Sloplex Go server](https://github.com/mtdewwolf/sloplex) remains the backend. This repository does not fork or replace that server.
 
-The device instrumentation tests exercise cache isolation, encrypted tokens, revocation, authenticated MP4 ranges, subtitles and HLS timeline logic. See `docs/android/compatibility-matrix.md` for actual results and physical hardware release gates.
+This is an **alpha implementation**, not a production release. See [the implementation plan](docs/android/implementation-plan.md) and [compatibility matrix](docs/android/compatibility-matrix.md) for remaining acceptance gates and actual test evidence.
+
+## Build
+
+Install JDK 17 and Android SDK 35, then from `android/`:
+
+```bash
+./gradlew :core:model:test :core:network:test :app-mobile:assembleDebug :app-tv:assembleDebug
+./gradlew :app-mobile:lintDebug :app-tv:lintDebug
+```
+
+Configure the SDK through `ANDROID_HOME` or an untracked `android/local.properties`. The Gradle wrapper downloads Gradle 8.13 and checks its SHA-256. Android Studio can open the `android/` folder directly.
+
+## Connect
+
+Start a Sloplex server and configure a local account with a password in its web app. Use HTTPS for remote access, including Tailscale Serve. On a private LAN, enter an IP and port (default 32400) and explicitly enable local HTTP. The apps never import an owner recovery token.
+
+Discovery uses GDM multicast/broadcast searches on UDP 32414, not mDNS. Discovered addresses must still pass `/identity` validation. A saved server's machine identity is checked before reusing credentials.
+
+For account isolation and remote/proxied access, leave the server's `allowedNetworks` empty. On a deliberately trusted LAN, `strictTokenAuth` from merged [server PR #4](https://github.com/mtdewwolf/sloplex/pull/4) rejects invalid supplied tokens while preserving tokenless owner access. The legacy default falls back to owner when a trusted peer sends an invalid token; client-side checks alone cannot close that race. Read [the security review](docs/android/security-review.md) before enabling trusted-network access.
+
+## Implemented paths
+
+- Multiple saved servers; validated identity; manual HTTPS and private LAN connections; GDM discovery.
+- Username/password login, encrypted device tokens, restoration, logout, and device-token revocation.
+- Account-scoped Room metadata cache with bounded size, DataStore profiles, and server-authoritative browsing.
+- Home rows, libraries, collections, playlists, search, show/season/episode navigation, media versions, and watched state.
+- Shared Media3 direct/HLS playback, source-time resume/seek, track selection, quality limits, progress reporting, and conversion-session cleanup.
+- Distinct Material 3 adaptive phone/tablet UI and TV Material UI with remote navigation and TV launcher assets.
+
+Passwords are never persisted, tokens travel in headers, redirects are disabled, and TLS uses the system trust store. Downloads and short-code TV pairing are not implemented. There is no Node.js or Bun dependency in the Android runtime.
+
+## Backend provenance
+
+The initial contract audit is pinned to server commit `0aa2e5f0c52f0d30cd38f4e9dadcfe274a184ce2` on `ccr-fac3cf8e-8f1rqf`. The separately tested hardening was merged as `0eeef57fe834a541581a0d7709be022816b5dbb6`; its tree matches the tested local change, and CI pins that revision. Re-audit later server changes before updating compatibility claims. See [architecture](docs/android/architecture.md), [API contract](docs/android/api-contract.md), and [validation report](docs/android/validation-report.md).
