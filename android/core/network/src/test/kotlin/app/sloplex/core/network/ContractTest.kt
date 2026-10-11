@@ -79,6 +79,14 @@ class ContractTest {
         assertTrue(runCatching { SafeUrl.resolve(base,"https://evil.example/poster") }.isFailure)
         assertTrue(runCatching { SafeUrl.resolve(base,"http://example.com/file") }.isFailure)
         assertEquals("http://192.168.1.10:32400/",SafeUrl.parse("192.168.1.10").toString())
+        assertEquals("http://192.168.1.10:8080/",SafeUrl.parse("192.168.1.10:8080").toString())
+        assertEquals("http://192.168.1.10/",SafeUrl.parse("192.168.1.10:80").toString())
+        listOf("https://user:pass@example.com/web/","https://example.com/webhooks","https://example.com/api/web/").forEach { assertTrue(it,runCatching { SafeUrl.parse(it) }.isFailure) }
+    }
+    @Test fun tailscaleServeAndWebAppAddressesNormalizeToTheOrigin() {
+        val origin="https://sloplex.tail850cd1.ts.net/"
+        listOf("https://sloplex.tail850cd1.ts.net/web/","https://sloplex.tail850cd1.ts.net/web","https://sloplex.tail850cd1.ts.net/web/index.html#!/","https://sloplex.tail850cd1.ts.net/web/?x=1"," sloplex.tail850cd1.ts.net/web/","sloplex.tail850cd1.ts.net","https://sloplex.tail850cd1.ts.net").forEach { assertEquals(it,origin,SafeUrl.parse(it).toString()) }
+        assertEquals("https://sloplex.tail850cd1.ts.net:32400/",SafeUrl.parse("sloplex.tail850cd1.ts.net:32400").toString())
     }
     @Test fun remoteHttpRefusesCredentialsAndCleartextNeedsConsent() {
         val s=ServerProfile("x","http://8.8.8.8:32400/","bad","v",true)
