@@ -1,7 +1,5 @@
-# Sloplex Android API and discovery
+# Sloplex Android auth and playback core
 
-PR 2 adds a verified Retrofit/Kotlinx Serialization client, identity validation, multiple saved DataStore server profiles, manual HTTPS/private LAN connections, GDM discovery and typed network errors to the native launchers. Authentication and media playback UI follow in the stacked branches.
+PR 3 adds Keystore device-token storage, validated sessions, account-partitioned Room metadata caching, shared Media3 direct/HLS playback, source timeline offsets, progress reporting and stream/session management. Mobile and TV browsing/player UI follow in PR 4.
 
-Build with JDK 17/SDK 35 in `android/`: `./gradlew :core:model:test :core:network:test :app-mobile:assembleDebug :app-tv:assembleDebug`. The optional actual-Go-server contract test runs with `python3 scripts/run-server-contracts.py --server-source /path/to/sloplex`.
-
-See `docs/android/` for exact endpoint schemas, security implications and the implementation plan.
+The device instrumentation tests exercise cache isolation, encrypted tokens, revocation, authenticated MP4 ranges, subtitles and HLS timeline logic. See `docs/android/compatibility-matrix.md` for actual results and physical hardware release gates.
