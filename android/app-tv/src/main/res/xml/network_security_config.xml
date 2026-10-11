@@ -1,0 +1,4 @@
+<network-security-config>
+    <!-- Dynamic private LAN addresses require platform cleartext support. The application interceptor restricts HTTP to literal private addresses, checks DNS, and refuses redirects. -->
+    <base-config cleartextTrafficPermitted="true"><trust-anchors><certificates src="system" /></trust-anchors></base-config>
+</network-security-config>
