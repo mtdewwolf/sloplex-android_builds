@@ -15,6 +15,40 @@ Install JDK 17 and Android SDK 35, then from `android/`:
 
 Configure the SDK through `ANDROID_HOME` or an untracked `android/local.properties`. The Gradle wrapper downloads Gradle 8.13 and checks its SHA-256. Android Studio can open the `android/` folder directly.
 
+## Phone APK releases
+
+The [Phone APK release workflow](.github/workflows/release.yml) publishes an optimized, signed phone APK and SHA-256 checksum to GitHub Releases. Downloads are standalone APK files, without the Actions artifact ZIP or sign-in requirement.
+
+Before the first release, add these repository secrets under **Settings → Secrets and variables → Actions** using your existing Android signing keystore:
+
+| Secret | Value |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | The entire keystore encoded as Base64, without line breaks |
+| `ANDROID_KEYSTORE_PASSWORD` | Keystore password |
+| `ANDROID_KEY_ALIAS` | Signing key alias |
+| `ANDROID_KEY_PASSWORD` | Signing key password (may match the keystore password) |
+
+For example, send the encoded keystore directly to GitHub using the CLI, without printing it:
+
+```bash
+base64 < /path/to/sloplex.jks | tr -d '\n' | gh secret set ANDROID_KEYSTORE_BASE64 --repo mtdewwolf/sloplex-android_builds
+```
+
+Keep using and backing up that same key for future releases. A release signed with a different key from the installed debug APK requires a one-time uninstall; subsequent releases with the same key can update normally. APK version names come from tags and version codes are `1000 +` the release workflow run number, so publish versions in order and keep this workflow's run history.
+
+After the workflow is merged, tag the commit you want to release:
+
+```bash
+git switch Master
+git pull --ff-only
+git tag v0.1.0-alpha02
+git push origin v0.1.0-alpha02
+```
+
+Tag pushes build, test, lint, sign, verify, and publish the phone APK. Tags containing a suffix, such as `-alpha02`, become prereleases. To retry a failed release, use **Actions → Phone APK release → Run workflow** on `Master` and enter the existing tag. Manual runs build that tag's commit, not the selected branch. Published assets are preserved; use a new tag for another build. Incomplete drafts can be retried.
+
+The download URL for the example above is `https://github.com/mtdewwolf/sloplex-android_builds/releases/download/v0.1.0-alpha02/Sloplex-phone.apk`. Each successful workflow also puts its download link in the run summary. Pull requests that change release packaging build and verify an APK with a temporary test key, without publishing a release or using production signing secrets.
+
 ## Connect
 
 Start a Sloplex server and configure a local account with a password in its web app. Use HTTPS for remote access, including Tailscale Serve: enter the hostname (for example `sloplex.<tailnet>.ts.net`) or paste the browser address — a trailing `/web/` path is dropped and HTTPS hostnames default to port 443. On a private LAN, enter an IP and port (default 32400) and explicitly enable local HTTP. The apps never import an owner recovery token.
