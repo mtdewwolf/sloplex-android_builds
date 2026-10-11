@@ -16,7 +16,7 @@ build_tools="$ANDROID_HOME/build-tools/35.0.0"
 keystore=$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/sloplex-signing.XXXXXX")
 trap 'rm -f "$keystore"' EXIT
 chmod 600 "$keystore"
-printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode > "$keystore"
 mkdir -p "$(dirname "$2")"
 "$build_tools/zipalign" -c -P 16 4 "$1"
 "$build_tools/apksigner" sign \
