@@ -2,12 +2,13 @@ name: Phone APK release
 
 on:
   push:
+    branches: [Master]
     tags: ['v*']
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing version tag to release (for example v0.1.0-alpha02)'
-        required: true
+        description: 'Version, with or without v (blank creates an automatic alpha release)'
+        required: false
         type: string
   pull_request:
     paths:
@@ -29,6 +30,7 @@ jobs:
     outputs:
       tag: ${{ steps.version.outputs.tag }}
       prerelease: ${{ steps.version.outputs.prerelease }}
+      commit: ${{ steps.source.outputs.commit }}
     steps:
       - name: Validate version
         id: version
@@ -36,14 +38,21 @@ jobs:
           EVENT: ${{ github.event_name }}
           INPUT_TAG: ${{ inputs.tag }}
           REF_TAG: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
           RUN_NUMBER: ${{ github.run_number }}
         shell: bash
         run: |
           if [[ "$EVENT" == pull_request ]]; then
             tag=v0.0.0-ci
+          elif [[ "$EVENT" == workflow_dispatch ]]; then
+            tag=$(printf '%s' "$INPUT_TAG" | xargs)
+            tag=${tag:-v0.1.0-alpha.$RUN_NUMBER}
+          elif [[ "$REF_TYPE" == branch ]]; then
+            tag=v0.1.0-alpha.$RUN_NUMBER
           else
-            tag=${INPUT_TAG:-$REF_TAG}
+            tag=$REF_TAG
           fi
+          tag=v${tag#v}
           if [[ ! "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
             echo "Expected a version tag such as v0.1.0-alpha02" >&2
             exit 1
@@ -70,8 +79,22 @@ jobs:
           done
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.ref || format('refs/tags/{0}', steps.version.outputs.tag) }}
           persist-credentials: false
+      - name: Resolve release source
+        id: source
+        env:
+          EVENT: ${{ github.event_name }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          # Existing tags always rebuild their original commit. New tags use this run's commit.
+          if [[ "$EVENT" == workflow_dispatch ]]; then
+            remote_tag=$(git ls-remote --tags origin "refs/tags/$TAG")
+            if [[ -n "$remote_tag" ]]; then
+              git fetch --no-tags origin "refs/tags/$TAG"
+              git checkout --detach FETCH_HEAD
+            fi
+          fi
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -145,18 +168,23 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.build.outputs.tag }}
           PRERELEASE: ${{ needs.build.outputs.prerelease }}
+          COMMIT: ${{ needs.build.outputs.commit }}
         run: |
           cd dist
           sha256sum --check Sloplex-phone.apk.sha256
           if draft=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null); then
             if [[ "$draft" != true ]]; then
-              echo "Release $TAG is already published; create a new version tag." >&2
-              exit 1
+              # A successful release is an idempotent no-op on reruns.
+              gh release download "$TAG" --pattern Sloplex-phone.apk --pattern Sloplex-phone.apk.sha256 --dir published
+              (cd published && sha256sum --check Sloplex-phone.apk.sha256)
+              echo "Release $TAG is already published; keeping its verified assets."
+              echo "[Download APK](https://github.com/$GH_REPO/releases/download/$TAG/Sloplex-phone.apk)" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
             fi
             gh release upload "$TAG" Sloplex-phone.apk Sloplex-phone.apk.sha256 --clobber
           else
             gh release create "$TAG" Sloplex-phone.apk Sloplex-phone.apk.sha256 \
-              --verify-tag --draft --title "Sloplex phone $TAG" --generate-notes
+              --target "$COMMIT" --draft --title "Sloplex phone $TAG" --generate-notes
           fi
           latest=true
           [[ "$PRERELEASE" != true ]] || latest=false

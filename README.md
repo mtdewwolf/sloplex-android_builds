@@ -36,7 +36,9 @@ base64 < /path/to/sloplex.jks | tr -d '\n' | gh secret set ANDROID_KEYSTORE_BASE
 
 Keep using and backing up that same key for future releases. A release signed with a different key from the installed debug APK requires a one-time uninstall; subsequent releases with the same key can update normally. APK version names come from tags and version codes are `1000 +` the release workflow run number, so publish versions in order and keep this workflow's run history.
 
-After the workflow is merged, tag the commit you want to release:
+Every push to `Master` automatically publishes an alpha APK as `v0.1.0-alpha.<run number>`. No manual tag creation is needed. For a named release, use **Actions → Phone APK release → Run workflow**, select `Master`, and enter a version such as `0.2.0` or `v0.1.0-alpha02`. The `v` prefix is optional; leaving the version blank creates another automatic alpha release. New versions build the selected branch's commit and create the release tag automatically after a successful build.
+
+You can also push a version tag yourself:
 
 ```bash
 git switch Master
@@ -45,7 +47,7 @@ git tag v0.1.0-alpha02
 git push origin v0.1.0-alpha02
 ```
 
-Tag pushes build, test, lint, sign, verify, and publish the phone APK. Tags containing a suffix, such as `-alpha02`, become prereleases. To retry a failed release, use **Actions → Phone APK release → Run workflow** on `Master` and enter the existing tag. Manual runs build that tag's commit, not the selected branch. Published assets are preserved; use a new tag for another build. Incomplete drafts can be retried.
+Tag pushes build, test, lint, sign, verify, and publish the phone APK. Tags containing a suffix, such as `-alpha02`, become prereleases. To retry a failed release, run the workflow again with that version. If its tag already exists, the original tagged commit is rebuilt. Published assets are preserved and their checksums rechecked on retries; use a new version for changed code. Incomplete drafts can be retried.
 
 The download URL for the example above is `https://github.com/mtdewwolf/sloplex-android_builds/releases/download/v0.1.0-alpha02/Sloplex-phone.apk`. Each successful workflow also puts its download link in the run summary. Pull requests that change release packaging build and verify an APK with a temporary test key, without publishing a release or using production signing secrets.
 
