@@ -47,44 +47,74 @@ import coil.ImageLoader
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 
-private val colors=darkColorScheme(primary=Color(0xff55e6c1),secondary=Color(0xff9cb8ef),background=Color(0xff080e17),surface=Color(0xff101b2b),surfaceVariant=Color(0xff192a3c))
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
+import app.sloplex.ui.design.*
 
 @Composable fun SloplexMobile(vm: SessionViewModel) {
-    val s by vm.state.collectAsStateWithLifecycle(); val playback by vm.playback.collectAsStateWithLifecycle(); val session by vm.session.collectAsStateWithLifecycle()
-    val context=LocalContext.current
-    val loader=remember(session) { ImageLoader.Builder(context).apply { session?.let { okHttpClient(it.client.http) }; diskCache(null) }.build() }
+    val s by vm.state.collectAsStateWithLifecycle()
+    val playback by vm.playback.collectAsStateWithLifecycle()
+    val session by vm.session.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val loader = remember(session) { ImageLoader.Builder(context).apply { session?.let { okHttpClient(it.client.http) }; diskCache(null) }.build() }
     DisposableEffect(loader) { onDispose { loader.shutdown() } }
-    val lifecycle=LocalLifecycleOwner.current.lifecycle
-    DisposableEffect(lifecycle) { val observer=LifecycleEventObserver { _,event -> if(event==Lifecycle.Event.ON_STOP && (context as? Activity)?.isChangingConfigurations!=true) vm.background(); if(event==Lifecycle.Event.ON_START) vm.foreground() }; lifecycle.addObserver(observer); onDispose { lifecycle.removeObserver(observer) } }
-    BackHandler(s.showPlayer || s.screen in listOf(Screen.DETAILS,Screen.LIBRARY,Screen.SEARCH,Screen.SETTINGS)) { vm.back() }
-    MaterialTheme(colorScheme=colors) {
-        Surface(Modifier.fillMaxSize()) {
-            if(s.showPlayer) MobilePlayer(vm,playback)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP && (context as? Activity)?.isChangingConfigurations != true) vm.background()
+            if (event == Lifecycle.Event.ON_START) vm.foreground()
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    BackHandler(s.showPlayer || s.screen in listOf(Screen.DETAILS, Screen.LIBRARY, Screen.SEARCH, Screen.SETTINGS)) { vm.back() }
+    SloplexTheme {
+        Surface(Modifier.fillMaxSize(), color = SloplexPalette.Background) {
+            if (s.showPlayer) MobilePlayer(vm, playback)
             else {
-                val wide=LocalConfiguration.current.screenWidthDp>=600
+                val wide = LocalConfiguration.current.screenWidthDp >= 600
                 Row(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-                    if(wide && s.account!=null) NavigationRail { Spacer(Modifier.height(24.dp)); Text("S",style=MaterialTheme.typography.headlineLarge,color=colors.primary); Spacer(Modifier.height(32.dp)); NavigationItems(s,vm,true) }
+                    if (wide && s.account != null) NavigationRail(containerColor = SloplexPalette.Surface) {
+                        BrandMark(Modifier.padding(vertical = 24.dp))
+                        NavigationItems(s, vm, true)
+                    }
                     Column(Modifier.weight(1f)) {
-                        Row(Modifier.fillMaxWidth().padding(20.dp),verticalAlignment=Alignment.CenterVertically) {
-                            if(s.screen !in listOf(Screen.HOME,Screen.CONNECTION,Screen.LOGIN)) IconButton(onClick=vm::back) { Icon(Icons.AutoMirrored.Filled.ArrowBack,"Back") }
-                            Text("SLOPLEX",style=MaterialTheme.typography.titleLarge,color=colors.primary,modifier=Modifier.weight(1f))
-                            if(s.account!=null) IconButton(onClick=vm::refresh) { Icon(Icons.Default.Refresh,"Refresh") }
-                        }
-                        if(s.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-                        s.error?.let { message -> Surface(color=MaterialTheme.colorScheme.errorContainer,modifier=Modifier.fillMaxWidth().padding(horizontal=16.dp)) { Row(Modifier.padding(12.dp),verticalAlignment=Alignment.CenterVertically) { Text(message,Modifier.weight(1f)); TextButton(onClick=vm::clearError) { Text("Dismiss") } } } }
-                        val holder=rememberSaveableStateHolder()
-                        Box(Modifier.weight(1f)) { holder.SaveableStateProvider("${s.profile?.machineId}:${s.account?.id}:${s.screen}:${s.selectedSection?.key}:${s.detail?.ratingKey}") {
-                            when(s.screen) {
-                                Screen.CONNECTION -> Connection(s,vm)
-                                Screen.LOGIN -> Login(s,vm)
-                                Screen.HOME -> Home(s,vm,session,loader)
-                                Screen.LIBRARY -> Library(s,vm,session,loader)
-                                Screen.DETAILS -> Details(s,vm,session,loader,wide)
-                                Screen.SEARCH -> Search(s,vm,session,loader)
-                                Screen.SETTINGS -> Settings(s,vm,playback)
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (s.screen !in listOf(Screen.HOME, Screen.CONNECTION, Screen.LOGIN)) IconButton(onClick = vm::back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+                            if (!wide || s.account == null) { BrandMark(); Spacer(Modifier.width(10.dp)) }
+                            Column(Modifier.weight(1f)) {
+                                Text("SLOPLEX", style = MaterialTheme.typography.titleMedium, letterSpacing = 2.sp)
+                                s.profile?.let { Text(it.name, style = MaterialTheme.typography.labelSmall, color = SloplexPalette.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                             }
-                        } }
-                        if(!wide && s.account!=null) NavigationBar { NavigationItems(s,vm,false) }
+                            if (s.account != null) IconButton(onClick = vm::refresh) { Icon(Icons.Default.Refresh, "Refresh", tint = SloplexPalette.Muted) }
+                        }
+                        if (s.busy) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
+                        s.error?.let { message ->
+                            Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
+                                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer)
+                                    TextButton(onClick = vm::clearError) { Text("Dismiss") }
+                                }
+                            }
+                        }
+                        val holder = rememberSaveableStateHolder()
+                        Box(Modifier.weight(1f)) {
+                            holder.SaveableStateProvider("${s.profile?.machineId}:${s.account?.id}:${s.screen}:${s.selectedSection?.key}:${s.detail?.ratingKey}") {
+                                when (s.screen) {
+                                    Screen.CONNECTION -> Connection(s, vm)
+                                    Screen.LOGIN -> Login(s, vm)
+                                    Screen.HOME -> Home(s, vm, session, loader)
+                                    Screen.LIBRARY -> Library(s, vm, session, loader)
+                                    Screen.DETAILS -> Details(s, vm, session, loader, wide)
+                                    Screen.SEARCH -> Search(s, vm, session, loader)
+                                    Screen.SETTINGS -> Settings(s, vm, playback)
+                                }
+                            }
+                        }
+                        if (!wide && s.account != null) NavigationBar(containerColor = SloplexPalette.Surface, tonalElevation = 0.dp, windowInsets = WindowInsets(0, 0, 0, 0)) { NavigationItems(s, vm, false) }
                     }
                 }
             }
@@ -92,112 +122,276 @@ private val colors=darkColorScheme(primary=Color(0xff55e6c1),secondary=Color(0xf
     }
 }
 
-@Composable private fun NavigationItems(s: AppState,vm: SessionViewModel,rail: Boolean) {
-    val tabs=listOf(Triple("Home",Icons.Default.Home, { vm.home() }),Triple("Movies",MovieIcon,{ s.sections.firstOrNull { it.type=="movie" }?.let(vm::browse) ?: vm.home() }),Triple("TV",TvIcon,{ s.sections.firstOrNull { it.type=="show" }?.let(vm::browse) ?: vm.home() }),Triple("Search",Icons.Default.Search,{ vm.searchScreen() }),Triple("Settings",Icons.Default.Settings,{ vm.settings() }))
-    fun selected(i: Int) = when(i) { 0 -> s.screen==Screen.HOME; 1 -> s.screen==Screen.LIBRARY && s.selectedSection?.type=="movie"; 2 -> s.screen==Screen.LIBRARY && s.selectedSection?.type=="show"; 3 -> s.screen==Screen.SEARCH; else -> s.screen==Screen.SETTINGS }
-    if(rail) tabs.forEachIndexed { i,(name,icon,action) -> NavigationRailItem(selected=selected(i),onClick=action,icon={Icon(icon,name)},label={Text(name)}) }
-    else Row(Modifier.fillMaxWidth()) { tabs.forEachIndexed { i,(name,icon,action) -> NavigationBarItem(selected=selected(i),onClick=action,icon={Icon(icon,name)},label={Text(name)}) } }
-}
-@Composable private fun Connection(s: AppState,vm: SessionViewModel) {
-    var url by rememberSaveable { mutableStateOf("") }; var local by rememberSaveable { mutableStateOf(false) }
-    LazyColumn(Modifier.fillMaxSize().imePadding().padding(horizontal=24.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
-        item { Text("Your library. Your screen.",style=MaterialTheme.typography.headlineLarge); Text("Connect to your Sloplex server on your network or over HTTPS.",Modifier.padding(top=8.dp)) }
-        item { OutlinedTextField(url,{url=it},label={Text("Server address")},placeholder={Text("192.168.1.20:32400 or https://…")},singleLine=true,modifier=Modifier.fillMaxWidth()) }
-        item { Row(verticalAlignment=Alignment.CenterVertically) { Checkbox(local,{local=it}); Text("Allow HTTP on my private LAN. Credentials are unencrypted on that LAN.",style=MaterialTheme.typography.bodySmall) } }
-        item { Button(onClick={vm.connect(url,local)},enabled=url.isNotBlank()&&!s.busy) { Text("Connect") } }
-        item { Text("Saved servers",style=MaterialTheme.typography.titleLarge) }
-        items(s.profiles,key={it.machineId}) { profile -> OutlinedButton(onClick={vm.connect(profile.url,profile.allowLanHttp,profile.machineId)},modifier=Modifier.fillMaxWidth(),enabled=!s.busy) { Text("${profile.name} · ${profile.url}") } }
-        item { Row(verticalAlignment=Alignment.CenterVertically) { Text("On your network",Modifier.weight(1f),style=MaterialTheme.typography.titleLarge); TextButton(onClick=vm::discover,enabled=!s.discovering) { Text(if(s.discovering) "Searching…" else "Scan") } } }
-        if(s.discovered.isEmpty()) item { Text("No server found yet. Manual connection also works with Tailscale HTTPS.") }
-        items(s.discovered,key={it.machineId}) { found -> OutlinedButton(onClick={url=found.url},modifier=Modifier.fillMaxWidth()) { Text("${found.name} · ${found.url}") } }
+@Composable private fun NavigationItems(s: AppState, vm: SessionViewModel, rail: Boolean) {
+    val tabs = listOf(Triple("Home", Icons.Default.Home, { vm.home() }), Triple("Movies", MovieIcon, { s.sections.firstOrNull { it.type == "movie" }?.let(vm::browse) ?: vm.home() }), Triple("TV", TvIcon, { s.sections.firstOrNull { it.type == "show" }?.let(vm::browse) ?: vm.home() }), Triple("Search", Icons.Default.Search, { vm.searchScreen() }), Triple("Settings", Icons.Default.Settings, { vm.settings() }))
+    fun selected(i: Int) = when (i) { 0 -> s.screen == Screen.HOME; 1 -> s.screen == Screen.LIBRARY && s.selectedSection?.type == "movie"; 2 -> s.screen == Screen.LIBRARY && s.selectedSection?.type == "show"; 3 -> s.screen == Screen.SEARCH; else -> s.screen == Screen.SETTINGS }
+    if (rail) tabs.forEachIndexed { i, (name, icon, action) ->
+        NavigationRailItem(selected = selected(i), onClick = action, icon = { Icon(icon, null) }, label = { Text(name) }, colors = NavigationRailItemDefaults.colors(indicatorColor = SloplexPalette.AccentContainer, selectedIconColor = SloplexPalette.Accent, selectedTextColor = SloplexPalette.Accent, unselectedIconColor = SloplexPalette.Muted, unselectedTextColor = SloplexPalette.Muted))
+    } else Row(Modifier.fillMaxWidth()) {
+        tabs.forEachIndexed { i, (name, icon, action) ->
+            NavigationBarItem(selected = selected(i), onClick = action, icon = { Icon(icon, null) }, label = { Text(name, maxLines = 1) }, colors = NavigationBarItemDefaults.colors(indicatorColor = SloplexPalette.AccentContainer, selectedIconColor = SloplexPalette.Accent, selectedTextColor = SloplexPalette.Accent, unselectedIconColor = SloplexPalette.Muted, unselectedTextColor = SloplexPalette.Muted))
+        }
     }
 }
-@Composable private fun Login(s: AppState,vm: SessionViewModel) {
-    val keyboard=LocalSoftwareKeyboardController.current
-    var name by rememberSaveable { mutableStateOf("") }; var password by remember { mutableStateOf("") }
-    Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(24.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
-        Text("Welcome to your cinema",style=MaterialTheme.typography.headlineLarge)
-        Text(s.profile?.url.orEmpty(),style=MaterialTheme.typography.bodySmall)
-        OutlinedTextField(name,{name=it},label={Text("Username")},singleLine=true,modifier=Modifier.fillMaxWidth())
-        OutlinedTextField(password,{password=it},label={Text("Password")},singleLine=true,visualTransformation=PasswordVisualTransformation(),keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Password,imeAction=ImeAction.Done,autoCorrectEnabled=false),keyboardActions=KeyboardActions(onDone={val value=password;password="";keyboard?.hide();if(name.isNotBlank()&&value.isNotBlank()&&!s.busy) vm.login(name,value)}),modifier=Modifier.fillMaxWidth())
-        Button(onClick={val value=password; password="";keyboard?.hide();vm.login(name,value)},enabled=name.isNotBlank()&&password.isNotBlank()&&!s.busy) { Text("Sign in") }
-        Text("Use a local Sloplex account with a password. Set up the owner's password in the server web app first.",style=MaterialTheme.typography.bodySmall)
-        TextButton(onClick=vm::connectionScreen) { Text("Change server") }
+
+@Composable private fun PageHeading(title: String, subtitle: String, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(title, style = MaterialTheme.typography.headlineLarge)
+        if (subtitle.isNotBlank()) Text(subtitle, color = SloplexPalette.Muted, style = MaterialTheme.typography.bodyMedium)
     }
 }
-@Composable private fun Artwork(item: MediaItem,session: Session?,loader: ImageLoader,modifier: Modifier=Modifier,path: String=item.poster) {
-    val context=LocalContext.current
-    val request=remember(path,session) { runCatching { ImageRequest.Builder(context).data(session?.client?.url(path)?.toString()).memoryCacheKey("${session?.scope}:${session?.tokenId}:${path}").build() }.getOrNull() }
-    Box(modifier.background(MaterialTheme.colorScheme.surfaceVariant),contentAlignment=Alignment.Center) {
-        if(path.isBlank()||request==null) Icon(MovieIcon,null,Modifier.size(32.dp))
-        else AsyncImage(request,contentDescription=item.title,imageLoader=loader,contentScale=ContentScale.Crop,modifier=Modifier.fillMaxSize())
+
+@Composable private fun EmptyState(title: String, message: String, icon: ImageVector = MovieIcon) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 32.dp, horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Icon(icon, null, Modifier.size(40.dp), tint = SloplexPalette.Accent)
+        Text(title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+        Text(message, color = SloplexPalette.Muted, textAlign = TextAlign.Center)
     }
 }
-@Composable private fun Poster(item: MediaItem,vm: SessionViewModel,session: Session?,loader: ImageLoader,modifier: Modifier=Modifier) {
-    Column(modifier.clickable { vm.details(item) }) {
-        Artwork(item,session,loader,Modifier.fillMaxWidth().aspectRatio(2f/3f))
-        Text(item.title,style=MaterialTheme.typography.titleSmall,maxLines=2,modifier=Modifier.padding(top=8.dp))
-        if(item.viewOffset>0 && item.durationMs>0) LinearProgressIndicator(progress={ (item.viewOffset.toFloat()/item.durationMs).coerceIn(0f,1f) },modifier=Modifier.fillMaxWidth().padding(top=4.dp))
-        if(item.year>0) Text(item.year.toString(),style=MaterialTheme.typography.labelSmall)
+
+@Composable private fun Connection(s: AppState, vm: SessionViewModel) {
+    var url by rememberSaveable { mutableStateOf("") }
+    var local by rememberSaveable { mutableStateOf(false) }
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        LazyColumn(Modifier.widthIn(max = 560.dp).fillMaxSize().imePadding(), contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            item { Text("YOUR PERSONAL CINEMA", color = SloplexPalette.Accent, style = MaterialTheme.typography.labelSmall); Spacer(Modifier.height(12.dp)); PageHeading("Your library.\nYour screen.", "All your movies and shows, in one place. Connect to your Sloplex server to get started.") }
+            item {
+                Surface(shape = MaterialTheme.shapes.large, color = SloplexPalette.Surface) {
+                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Text("Connect a server", style = MaterialTheme.typography.titleLarge)
+                        OutlinedTextField(url, { url = it }, label = { Text("Server address") }, placeholder = { Text("https://sloplex.example.com") }, supportingText = { Text("HTTPS hostname or private LAN IP and port") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium)
+                        Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(local, { local = it }); Text("Allow HTTP on my private LAN. Credentials are unencrypted on that LAN.", style = MaterialTheme.typography.bodySmall, color = SloplexPalette.Muted) }
+                        Button(onClick = { vm.connect(url, local) }, enabled = url.isNotBlank() && !s.busy, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Connect") }
+                    }
+                }
+            }
+            if (s.profiles.isNotEmpty()) item { Text("Saved servers", style = MaterialTheme.typography.titleLarge) }
+            items(s.profiles, key = { it.machineId }) { profile ->
+                ServerCard(profile.name, profile.url, !s.busy) { vm.connect(profile.url, profile.allowLanHttp, profile.machineId) }
+            }
+            item { Row(verticalAlignment = Alignment.CenterVertically) { Text("On your network", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge); TextButton(onClick = vm::discover, enabled = !s.discovering) { Text(if (s.discovering) "Searching…" else "Scan") } } }
+            if (s.discovered.isEmpty()) item { Text("No server found yet. Enter an address above, or scan your network again.", color = SloplexPalette.Muted, style = MaterialTheme.typography.bodyMedium) }
+            items(s.discovered, key = { it.machineId }) { found -> ServerCard(found.name, found.url, !s.busy) { url = found.url } }
+        }
     }
 }
-@Composable private fun Rows(rows: List<MediaRow>,vm: SessionViewModel,session: Session?,loader: ImageLoader) {
-    rows.forEach { row -> Text(row.title,style=MaterialTheme.typography.titleLarge,modifier=Modifier.padding(16.dp)); LazyRow(horizontalArrangement=Arrangement.spacedBy(14.dp),contentPadding=PaddingValues(horizontal=16.dp)) { items(row.items,key={"${it.type}:${it.ratingKey}"}) { Poster(it,vm,session,loader,Modifier.width(140.dp)) } } }
+
+@Composable private fun ServerCard(name: String, address: String, enabled: Boolean, onClick: () -> Unit) {
+    OutlinedCard(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth(), colors = CardDefaults.outlinedCardColors(containerColor = SloplexPalette.Surface)) {
+        Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Icon(TvIcon, null, tint = SloplexPalette.Accent)
+            Column(Modifier.weight(1f)) { Text(name, style = MaterialTheme.typography.titleMedium); Text(address, color = SloplexPalette.Muted, style = MaterialTheme.typography.bodySmall) }
+        }
+    }
 }
-@Composable private fun Home(s: AppState,vm: SessionViewModel,session: Session?,loader: ImageLoader) {
-    LazyColumn(verticalArrangement=Arrangement.spacedBy(12.dp)) {
-        item { Column(Modifier.padding(20.dp)) { Text("Tonight starts here",style=MaterialTheme.typography.headlineLarge); Text("${s.account?.name} · ${s.profile?.name}",color=colors.secondary) } }
-        item { LazyRow(contentPadding=PaddingValues(horizontal=16.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) { items(s.sections,key={it.key}) { section -> FilledTonalButton(onClick={vm.browse(section)}) { Text(section.title) } } } }
-        s.rows.firstOrNull()?.items?.firstOrNull { it.backdrop.isNotBlank() }?.let { featured ->
-            item(key="featured") {
-                Box(Modifier.fillMaxWidth().aspectRatio(16f/6f).clickable { vm.details(featured) }) {
-                    Artwork(featured,session,loader,Modifier.fillMaxSize(),path=featured.backdrop)
-                    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent,Color(0xee080e17)))))
-                    Text(featured.title,Modifier.align(Alignment.BottomStart).padding(24.dp),style=MaterialTheme.typography.headlineLarge)
+
+@Composable private fun Login(s: AppState, vm: SessionViewModel) {
+    val keyboard = LocalSoftwareKeyboardController.current
+    var name by rememberSaveable { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Column(Modifier.widthIn(max = 560.dp).fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+            Text("MAKE YOURSELF AT HOME", style = MaterialTheme.typography.labelSmall, color = SloplexPalette.Accent)
+            PageHeading("Welcome to\nyour cinema", "Sign in to ${s.profile?.name ?: "your Sloplex server"}.")
+            Surface(shape = MaterialTheme.shapes.large, color = SloplexPalette.Surface) {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                    OutlinedTextField(name, { name = it }, label = { Text("Username") }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium)
+                    OutlinedTextField(password, { password = it }, label = { Text("Password") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done, autoCorrectEnabled = false), keyboardActions = KeyboardActions(onDone = { val value = password; password = ""; keyboard?.hide(); if (name.isNotBlank() && value.isNotBlank() && !s.busy) vm.login(name, value) }), modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium)
+                    Button(onClick = { val value = password; password = ""; keyboard?.hide(); vm.login(name, value) }, enabled = name.isNotBlank() && password.isNotBlank() && !s.busy, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Sign in") }
+                }
+            }
+            Text("Use a local Sloplex account with a password. Set up the owner's password in the server web app first.", style = MaterialTheme.typography.bodySmall, color = SloplexPalette.Muted)
+            Text(s.profile?.url.orEmpty(), style = MaterialTheme.typography.bodySmall, color = SloplexPalette.Muted)
+            TextButton(onClick = vm::connectionScreen) { Text("Change server") }
+        }
+    }
+}
+
+@Composable private fun Artwork(item: MediaItem, session: Session?, loader: ImageLoader, modifier: Modifier = Modifier, path: String = item.poster) {
+    val context = LocalContext.current
+    val request = remember(path, session) { runCatching { ImageRequest.Builder(context).data(session?.client?.url(path)?.toString()).memoryCacheKey("${session?.scope}:${session?.tokenId}:${path}").build() }.getOrNull() }
+    Box(modifier.background(Brush.linearGradient(listOf(SloplexPalette.Elevated, SloplexPalette.Surface))), contentAlignment = Alignment.Center) {
+        Icon(MovieIcon, null, Modifier.size(36.dp), tint = SloplexPalette.Muted.copy(alpha = 0.45f))
+        if (path.isNotBlank() && request != null) AsyncImage(request, contentDescription = null, imageLoader = loader, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+    }
+}
+
+@Composable private fun Poster(item: MediaItem, vm: SessionViewModel, session: Session?, loader: ImageLoader, modifier: Modifier = Modifier, landscape: Boolean = false) {
+    Column(modifier.clip(MaterialTheme.shapes.medium).clickable(onClickLabel = "View ${item.title}") { vm.details(item) }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.fillMaxWidth().aspectRatio(if (landscape) 16f / 9f else 2f / 3f).clip(MaterialTheme.shapes.medium)) {
+            Artwork(item, session, loader, Modifier.fillMaxSize(), path = if (landscape) item.backdrop.ifBlank { item.poster } else item.poster)
+            if (item.viewCount > 0) Surface(Modifier.align(Alignment.TopEnd).padding(8.dp), color = SloplexPalette.Background.copy(alpha = 0.9f), shape = CircleShape) { Icon(Icons.Default.Check, "Watched", Modifier.padding(4.dp).size(16.dp), tint = SloplexPalette.Accent) }
+            if (item.viewOffset > 0 && item.durationMs > 0) LinearProgressIndicator(progress = { (item.viewOffset.toFloat() / item.durationMs).coerceIn(0f, 1f) }, modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(3.dp), trackColor = SloplexPalette.Border)
+        }
+        Text(item.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        val caption = if (landscape && item.durationMs > item.viewOffset) "${(item.durationMs - item.viewOffset) / 60000} min left" else listOfNotNull(item.year.takeIf { it > 0 }?.toString(), item.contentRating.takeIf { it.isNotBlank() }).joinToString(" · ")
+        if (caption.isNotBlank()) Text(caption, style = MaterialTheme.typography.bodySmall, color = SloplexPalette.Muted)
+    }
+}
+
+@Composable private fun Rows(rows: List<MediaRow>, vm: SessionViewModel, session: Session?, loader: ImageLoader) {
+    rows.forEach { row ->
+        val landscape = row.title == "Continue watching"
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Text(row.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 20.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(horizontal = 20.dp)) {
+                items(row.items, key = { "${it.type}:${it.ratingKey}" }) { Poster(it, vm, session, loader, Modifier.width(if (landscape) 248.dp else 140.dp), landscape) }
+            }
+        }
+    }
+}
+
+@Composable private fun Featured(item: MediaItem, vm: SessionViewModel, session: Session?, loader: ImageLoader) {
+    val wide = LocalConfiguration.current.screenWidthDp >= 600
+    Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp).clip(MaterialTheme.shapes.large).clickable(onClickLabel = "View ${item.title}") { vm.details(item) }) {
+        Artwork(item, session, loader, Modifier.matchParentSize(), path = item.backdrop)
+        Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(SloplexPalette.Background.copy(alpha = 0.1f), SloplexPalette.Background.copy(alpha = 0.98f)))))
+        Column(Modifier.fillMaxWidth().heightIn(min = if (wide) 340.dp else 300.dp).padding(24.dp), verticalArrangement = Arrangement.Bottom) {
+            Text("IN THE SPOTLIGHT", style = MaterialTheme.typography.labelSmall, color = SloplexPalette.Accent)
+            Spacer(Modifier.height(12.dp))
+            Text(item.title, style = MaterialTheme.typography.headlineLarge, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(8.dp))
+            Text(mediaMetadata(item), color = SloplexPalette.Muted, style = MaterialTheme.typography.bodySmall)
+            if (item.summary.isNotBlank()) Text(item.summary, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 10.dp).widthIn(max = 520.dp))
+            Spacer(Modifier.height(18.dp))
+            Button(onClick = { vm.details(item) }) { Icon(Icons.Default.Info, null, Modifier.size(20.dp)); Spacer(Modifier.width(6.dp)); Text("Explore title") }
+        }
+    }
+}
+
+@Composable private fun Home(s: AppState, vm: SessionViewModel, session: Session?, loader: ImageLoader) {
+    LazyColumn(contentPadding = PaddingValues(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(28.dp)) {
+        item { PageHeading("Tonight starts here", "Welcome back, ${s.account?.name.orEmpty()}.", Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) }
+        if (s.sections.isNotEmpty()) item { LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) { items(s.sections, key = { it.key }) { section -> OutlinedButton(onClick = { vm.browse(section) }) { Icon(if (section.type == "show") TvIcon else MovieIcon, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(section.title) } } } }
+        s.rows.asSequence().flatMap { it.items.asSequence() }.firstOrNull { it.backdrop.isNotBlank() }?.let { featured -> item(key = "featured") { Featured(featured, vm, session, loader) } }
+        s.rows.forEachIndexed { index, row -> item(key = "row:$index:${row.title}") { Rows(listOf(row), vm, session, loader) } }
+        if (s.rows.isEmpty() && !s.busy) item { EmptyState("Your cinema starts here", "Add movie or TV libraries on your Sloplex server. Your titles will appear here.") }
+    }
+}
+
+@Composable private fun Library(s: AppState, vm: SessionViewModel, session: Session?, loader: ImageLoader) {
+    LazyVerticalGrid(columns = GridCells.Adaptive(128.dp), contentPadding = PaddingValues(20.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+        item(span = { GridItemSpan(maxLineSpan) }) { PageHeading(s.selectedSection?.title ?: "Library", "${s.items.size} titles in your library") }
+        if (s.rows.isNotEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { Column(verticalArrangement = Arrangement.spacedBy(24.dp)) { Rows(s.rows, vm, session, loader) } }
+        items(s.items, key = { "${it.type}:${it.ratingKey}" }) { Poster(it, vm, session, loader) }
+        if (s.items.isEmpty() && s.rows.isEmpty() && !s.busy) item(span = { GridItemSpan(maxLineSpan) }) { EmptyState("Nothing here yet", "No media is available in this library.") }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable private fun Details(s: AppState, vm: SessionViewModel, session: Session?, loader: ImageLoader, wide: Boolean) {
+    val item = s.detail ?: return
+    var version by rememberSaveable(item.ratingKey) { mutableIntStateOf(0) }
+    LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+        if (item.backdrop.isNotBlank()) item {
+            Box(Modifier.fillMaxWidth().height(if (wide) 260.dp else 180.dp).clip(MaterialTheme.shapes.large)) {
+                Artwork(item, session, loader, Modifier.fillMaxSize(), path = item.backdrop)
+                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, SloplexPalette.Background.copy(alpha = 0.8f)))))
+            }
+        }
+        item {
+            if (wide) Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+                Artwork(item, session, loader, Modifier.width(200.dp).aspectRatio(2f / 3f).clip(MaterialTheme.shapes.medium))
+                DetailText(item, Modifier.weight(1f))
+            } else if (item.poster.isNotBlank()) Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    Artwork(item, session, loader, Modifier.width(104.dp).aspectRatio(2f / 3f).clip(MaterialTheme.shapes.medium))
+                    DetailText(item, Modifier.weight(1f), showSummary = false)
+                }
+                Text(item.summary.ifBlank { "No description is available for this title." }, style = MaterialTheme.typography.bodyLarge)
+            } else DetailText(item)
+        }
+        s.nextEpisode?.let { next -> item { Button(onClick = { vm.play(next) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(8.dp)); Text("${if (next.viewOffset > 0) "Resume" else "Next episode"}: ${next.title}") } } }
+        if (item.playable) item {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(onClick = { vm.play(item, true, version) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(8.dp)); Text(if (item.viewOffset > 0) "Resume ${clock(item.viewOffset)}" else "Play") }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (item.viewOffset > 0) OutlinedButton(onClick = { vm.play(item, false, version) }) { Text("Start over") }
+                    OutlinedButton(onClick = { vm.watched(item) }) { Icon(Icons.Default.Check, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(if (item.viewCount > 0) "Mark unwatched" else "Mark watched") }
                 }
             }
         }
-        s.rows.forEach { row -> item(key=row.title) { Rows(listOf(row),vm,session,loader) } }
-        if(s.rows.isEmpty()&&!s.busy) item { Text("Your server has no available media yet. Add movie or TV libraries in Sloplex.",Modifier.padding(24.dp)) }
-        item { Spacer(Modifier.height(20.dp)) }
+        if (item.versions.size > 1) item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Available versions", style = MaterialTheme.typography.titleLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { item.versions.forEachIndexed { i, v -> FilterChip(selected = version == i, onClick = { version = i }, label = { Text("${v.videoResolution} ${v.videoCodec} · ${v.container}") }) } }
+            }
+        }
+        item { item.versions.getOrNull(version)?.let { media ->
+            Surface(shape = MaterialTheme.shapes.medium, color = SloplexPalette.Surface) {
+                Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Media information", style = MaterialTheme.typography.titleSmall)
+                    Text("${media.width} × ${media.height} · ${media.videoCodec.uppercase()} · ${media.audioCodec.uppercase()} · ${media.container.uppercase()}", style = MaterialTheme.typography.bodySmall, color = SloplexPalette.Muted)
+                    media.parts.flatMap { it.streams }.filter { it.streamType in 2..3 }.forEach { Text(it.extendedDisplayTitle.ifBlank { it.displayTitle }, style = MaterialTheme.typography.bodySmall, color = SloplexPalette.Muted) }
+                }
+            }
+        } }
+        if (item.cast.isNotEmpty()) item { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { Text("Cast", style = MaterialTheme.typography.titleLarge); Text(item.cast.joinToString("  ·  ") { it.tag }, color = SloplexPalette.Muted) } }
+        if (s.children.isNotEmpty()) item { Text(if (item.type == "show") "Seasons" else "Episodes & items", style = MaterialTheme.typography.titleLarge) }
+        items(s.children, key = { "${it.type}:${it.ratingKey}" }) { child ->
+            Surface(onClick = { vm.details(child) }, shape = MaterialTheme.shapes.medium, color = SloplexPalette.Surface) {
+                Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Artwork(child, session, loader, Modifier.width(64.dp).height(90.dp).clip(MaterialTheme.shapes.small))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) { Text(child.title, style = MaterialTheme.typography.titleMedium); Text(child.summary.ifBlank { if (child.viewCount > 0) "Watched" else "Unwatched" }, maxLines = 3, overflow = TextOverflow.Ellipsis, color = SloplexPalette.Muted, style = MaterialTheme.typography.bodySmall) }
+                }
+            }
+        }
     }
 }
-@Composable private fun Library(s: AppState,vm: SessionViewModel,session: Session?,loader: ImageLoader) {
-    LazyVerticalGrid(columns=GridCells.Adaptive(130.dp),contentPadding=PaddingValues(16.dp),horizontalArrangement=Arrangement.spacedBy(14.dp),verticalArrangement=Arrangement.spacedBy(20.dp)) {
-        item(span={GridItemSpan(maxLineSpan)}) { Text(s.selectedSection?.title.orEmpty(),style=MaterialTheme.typography.headlineMedium) }
-        if(s.rows.isNotEmpty()) item(span={GridItemSpan(maxLineSpan)}) { Rows(s.rows,vm,session,loader) }
-        items(s.items,key={it.ratingKey}) { Poster(it,vm,session,loader) }
-        if(s.items.isEmpty()&&!s.busy) item(span={GridItemSpan(maxLineSpan)}) { Text("No media is available in this library.") }
+
+private fun mediaMetadata(item: MediaItem) = listOfNotNull(item.year.takeIf { it > 0 }?.toString(), item.durationMs.takeIf { it > 0 }?.let { "${it / 60000} min" }, item.contentRating.takeIf { it.isNotBlank() }, item.rating.takeIf { it > 0 }?.let { "★ $it" }).joinToString(" · ")
+
+@Composable private fun DetailText(item: MediaItem, modifier: Modifier = Modifier, showSummary: Boolean = true) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text(item.type.uppercase(), style = MaterialTheme.typography.labelSmall, color = SloplexPalette.Accent)
+        Text(item.title, style = MaterialTheme.typography.headlineLarge)
+        Text(mediaMetadata(item), color = SloplexPalette.Muted, style = MaterialTheme.typography.bodyMedium)
+        if (item.genres.isNotEmpty()) Text(item.genres.joinToString(" · ") { it.tag }, color = SloplexPalette.Accent, style = MaterialTheme.typography.bodySmall)
+        if (showSummary) Text(item.summary.ifBlank { "No description is available for this title." }, style = MaterialTheme.typography.bodyLarge)
     }
 }
-@Composable private fun Details(s: AppState,vm: SessionViewModel,session: Session?,loader: ImageLoader,wide: Boolean) {
-    val item=s.detail ?: return
-    var version by rememberSaveable(item.ratingKey) { mutableIntStateOf(0) }
-    LazyColumn(Modifier.padding(horizontal=20.dp),verticalArrangement=Arrangement.spacedBy(18.dp)) {
-        item { if(wide) Row(horizontalArrangement=Arrangement.spacedBy(24.dp)) { Artwork(item,session,loader,Modifier.width(220.dp).aspectRatio(2f/3f)); DetailText(item,Modifier.weight(1f)) }
-        else Column { Artwork(item,session,loader,Modifier.width(170.dp).aspectRatio(2f/3f)); Spacer(Modifier.height(16.dp)); DetailText(item) } }
-        s.nextEpisode?.let { next -> item { Button(onClick={vm.play(next)}) { Text("${if(next.viewOffset>0) "Resume" else "Next episode"}: ${next.title}") } } }
-        if(item.playable) item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) { Button(onClick={vm.play(item,true,version)}) { Text(if(item.viewOffset>0) "Resume ${clock(item.viewOffset)}" else "Play") }; if(item.viewOffset>0) OutlinedButton(onClick={vm.play(item,false,version)}) { Text("Start over") } } }
-        if(item.playable) item { OutlinedButton(onClick={vm.watched(item)}) { Text(if(item.viewCount>0) "Mark unwatched" else "Mark watched") } }
-        if(item.versions.size>1) item { Column { Text("Available versions"); item.versions.forEachIndexed { i,v -> FilterChip(selected=version==i,onClick={version=i},label={Text("${v.videoResolution} ${v.videoCodec} · ${v.container}")}) } } }
-        item { item.versions.getOrNull(version)?.let { media -> Text("${media.width} × ${media.height} · ${media.videoCodec.uppercase()} · ${media.audioCodec.uppercase()} · ${media.container.uppercase()}",style=MaterialTheme.typography.bodySmall); media.parts.flatMap { it.streams }.filter { it.streamType in 2..3 }.forEach { Text(it.extendedDisplayTitle.ifBlank { it.displayTitle },style=MaterialTheme.typography.bodySmall) } } }
-        if(item.cast.isNotEmpty()) item { Text("Cast",style=MaterialTheme.typography.titleLarge); Text(item.cast.joinToString("  ·  ") { it.tag }) }
-        if(s.children.isNotEmpty()) item { Text(if(item.type=="show") "Seasons" else "Episodes & items",style=MaterialTheme.typography.titleLarge) }
-        items(s.children,key={"${it.type}:${it.ratingKey}"}) { child -> ListItem(headlineContent={Text(child.title)},supportingContent={Text(child.summary.take(180).ifBlank { if(child.viewCount>0) "Watched" else "Unwatched" })},leadingContent={Artwork(child,session,loader,Modifier.width(64.dp).height(90.dp))},modifier=Modifier.clickable { vm.details(child) }) }
-        item { Spacer(Modifier.height(20.dp)) }
+
+@Composable private fun Search(s: AppState, vm: SessionViewModel, session: Session?, loader: ImageLoader) {
+    LazyVerticalGrid(columns = GridCells.Adaptive(128.dp), modifier = Modifier.imePadding(), contentPadding = PaddingValues(20.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+        item(span = { GridItemSpan(maxLineSpan) }) { PageHeading("Find your next favorite", "Search movies, shows, and more.") }
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            OutlinedTextField(s.query, vm::search, label = { Text("Search your library") }, leadingIcon = { Icon(Icons.Default.Search, null) }, trailingIcon = { if (s.query.isNotEmpty()) IconButton(onClick = { vm.search("") }) { Icon(Icons.Default.Close, "Clear search") } }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = MaterialTheme.shapes.medium)
+        }
+        if (s.items.isNotEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { Text("${s.items.size} results", style = MaterialTheme.typography.labelLarge, color = SloplexPalette.Muted) }
+        items(s.items, key = { "${it.type}:${it.ratingKey}" }) { Poster(it, vm, session, loader) }
+        if (s.items.isEmpty() && !s.busy) item(span = { GridItemSpan(maxLineSpan) }) { EmptyState(if (s.query.isBlank()) "A whole library to explore" else "No matches yet", if (s.query.isBlank()) "Start with a title you love." else "Try another title or a shorter search.", Icons.Default.Search) }
     }
 }
-@Composable private fun DetailText(item: MediaItem,modifier: Modifier=Modifier) { Column(modifier,verticalArrangement=Arrangement.spacedBy(12.dp)) { Text(item.title,style=MaterialTheme.typography.headlineLarge); Text(listOfNotNull(item.year.takeIf { it>0 }?.toString(),item.durationMs.takeIf { it>0 }?.let { "${it/60000} min" },item.contentRating.takeIf { it.isNotBlank() },item.rating.takeIf { it>0 }?.let { "★ $it" }).joinToString(" · "),color=colors.secondary); if(item.genres.isNotEmpty()) Text(item.genres.joinToString(" · ") { it.tag }); Text(item.summary.ifBlank { "No description is available for this title." }) } }
-@Composable private fun Search(s: AppState,vm: SessionViewModel,session: Session?,loader: ImageLoader) { Column(Modifier.padding(16.dp)) { OutlinedTextField(s.query,vm::search,label={Text("Search your library")},modifier=Modifier.fillMaxWidth(),singleLine=true); Spacer(Modifier.height(16.dp)); LazyVerticalGrid(GridCells.Adaptive(130.dp),horizontalArrangement=Arrangement.spacedBy(14.dp),verticalArrangement=Arrangement.spacedBy(18.dp)) { items(s.items,key={it.ratingKey}) { Poster(it,vm,session,loader) } } } }
-@Composable private fun Settings(s: AppState,vm: SessionViewModel,p: PlayerState) {
-    LazyColumn(Modifier.padding(24.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-        item { Text("Connected to ${s.profile?.name}",style=MaterialTheme.typography.headlineSmall); Text("${s.profile?.url}\nServer ${s.profile?.version}\nAndroid alpha 0.1.0\nAccount: ${s.account?.name}\nConnection: ${if(s.profile?.url?.startsWith("https:")==true) "HTTPS" else "Private LAN HTTP"}") }
-        item { OutlinedButton(onClick=vm::connectionScreen) { Text("Switch server") }; OutlinedButton(onClick=vm::logout) { Text("Sign out") } }
-        item { Text("Signed-in devices",style=MaterialTheme.typography.titleLarge) }
-        items(s.tokens,key={it.id}) { token -> Row(verticalAlignment=Alignment.CenterVertically) { Text(token.device,Modifier.weight(1f)); TextButton(onClick={vm.revoke(token.id)}) { Text("Sign out device") } } }
-        item { Text("Playback diagnostics",style=MaterialTheme.typography.titleLarge); Text("Mode: ${p.mode ?: "Idle"}\nVideo: ${p.videoCodec}\nAudio: ${p.audioCodec}\nResolution: ${p.resolution}\nBuffering: ${p.buffering}"); p.error?.let { Text(it) } }
+
+@Composable private fun Settings(s: AppState, vm: SessionViewModel, p: PlayerState) {
+    LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+        item { PageHeading("Make yourself at home", "Your server, account, and devices.") }
+        item {
+            Surface(shape = MaterialTheme.shapes.large, color = SloplexPalette.Surface) {
+                Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Surface(shape = CircleShape, color = SloplexPalette.AccentContainer) { Text(s.account?.name?.take(1)?.uppercase().orEmpty(), Modifier.padding(16.dp), color = SloplexPalette.Accent, style = MaterialTheme.typography.titleLarge) }
+                        Column { Text(s.account?.name.orEmpty(), style = MaterialTheme.typography.titleLarge); Text("Connected to ${s.profile?.name}", color = SloplexPalette.Muted, style = MaterialTheme.typography.bodySmall) }
+                    }
+                    HorizontalDivider(color = SloplexPalette.Border)
+                    Text(s.profile?.url.orEmpty(), color = SloplexPalette.Muted)
+                    Text("${if (s.profile?.url?.startsWith("https:") == true) "HTTPS" else "Private LAN HTTP"} · Server ${s.profile?.version}", color = SloplexPalette.Muted, style = MaterialTheme.typography.bodySmall)
+                    OutlinedButton(onClick = vm::connectionScreen, modifier = Modifier.fillMaxWidth()) { Text("Switch server") }
+                    TextButton(onClick = vm::logout, modifier = Modifier.fillMaxWidth()) { Text("Sign out", color = MaterialTheme.colorScheme.error) }
+                }
+            }
+        }
+        item { Text("Signed-in devices", style = MaterialTheme.typography.titleLarge) }
+        items(s.tokens, key = { it.id }) { token -> Surface(shape = MaterialTheme.shapes.medium, color = SloplexPalette.Surface) { Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Text(token.device, Modifier.weight(1f)); TextButton(onClick = { vm.revoke(token.id) }) { Text("Sign out device") } } } }
+        item {
+            Surface(shape = MaterialTheme.shapes.medium, color = SloplexPalette.Surface) {
+                Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { Text("Playback diagnostics", style = MaterialTheme.typography.titleMedium); Text("Mode: ${p.mode ?: "Idle"}\nVideo: ${p.videoCodec}\nAudio: ${p.audioCodec}\nResolution: ${p.resolution}\nBuffering: ${p.buffering}", color = SloplexPalette.Muted, style = MaterialTheme.typography.bodySmall); p.error?.let { Text(it, color = MaterialTheme.colorScheme.error) } }
+            }
+        }
+        item { Text("Sloplex for Android · 0.1.0 alpha", color = SloplexPalette.Muted, style = MaterialTheme.typography.labelSmall) }
     }
 }
+
 @Composable private fun MobilePlayer(vm: SessionViewModel,p: PlayerState) {
     // Read the player during composition so AndroidView updates when async preparation replaces it.
     val player = vm.engine.player
@@ -207,7 +401,7 @@ private val colors=darkColorScheme(primary=Color(0xff55e6c1),secondary=Color(0xf
         AndroidView(factory={PlayerView(it).apply { useController=false;keepScreenOn=true;setEnableComposeSurfaceSyncWorkaround(true) }},update={it.player=player},onRelease={it.player=null},modifier=Modifier.fillMaxSize())
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp),verticalArrangement=Arrangement.SpaceBetween) {
             Row(verticalAlignment=Alignment.CenterVertically) { FilledTonalIconButton(onClick=vm::back) { Icon(Icons.AutoMirrored.Filled.ArrowBack,"Close player") }; Text(p.item?.title.orEmpty(),Modifier.padding(12.dp),style=MaterialTheme.typography.titleMedium) }
-            Surface(color=Color(0xd9101b2b)) { Column(Modifier.padding(16.dp)) {
+            Surface(color=SloplexPalette.Surface.copy(alpha=0.94f),shape=MaterialTheme.shapes.large) { Column(Modifier.padding(16.dp)) {
                 if(p.buffering) LinearProgressIndicator(Modifier.fillMaxWidth())
                 p.syncError?.let { Text(it,style=MaterialTheme.typography.bodySmall) }
             p.error?.let { Text(it); Button(onClick=vm::retryPlayback) { Text("Retry playback") } }
@@ -215,7 +409,7 @@ private val colors=darkColorScheme(primary=Color(0xff55e6c1),secondary=Color(0xf
                 Text("${clock(p.positionMs)} / ${clock(p.durationMs)} · ${p.mode ?: "Preparing"}")
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.CenterVertically) {
                     IconButton(onClick={vm.seek(p.positionMs-10000)}) { Text("−10") }
-                    IconButton(onClick={vm.engine.toggle()}) { Icon(if(p.playing) PauseIcon else Icons.Default.PlayArrow,if(p.playing) "Pause" else "Play") }
+                    FilledIconButton(onClick={vm.engine.toggle()},modifier=Modifier.size(56.dp)) { Icon(if(p.playing) PauseIcon else Icons.Default.PlayArrow,if(p.playing) "Pause" else "Play") }
                     IconButton(onClick={vm.seek(p.positionMs+30000)}) { Text("+30") }
                     IconButton(onClick={menus=true}) { Icon(Icons.Default.Settings,"Audio, subtitles, and quality") }
                 }

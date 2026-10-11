@@ -86,6 +86,11 @@ class ConnectionFlowTest {
         compose.activityRule.scenario.recreate()
         compose.waitUntil(45000) { compose.onAllNodesWithText("Mark unwatched").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("Back").performClick()
+        compose.onNodeWithText("Search",useUnmergedTree=true).performClick()
+        compose.onNodeWithText("Search your library").performTextInput("no-matching-title")
+        compose.waitUntil(30000) { compose.onAllNodesWithText("No matches yet").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Clear search").performClick()
+        compose.onNodeWithText("A whole library to explore").assertExists()
         compose.onNodeWithText("Settings",useUnmergedTree=true).performClick()
         compose.waitUntil(45000) { compose.onAllNodesWithText("Sign out",useUnmergedTree=true).fetchSemanticsNodes().isNotEmpty() }
         val vault=app.sloplex.core.data.TokenVault(androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext)
