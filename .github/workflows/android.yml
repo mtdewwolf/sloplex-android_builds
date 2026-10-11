@@ -72,3 +72,27 @@ jobs:
         with:
           name: emulator-${{ matrix.module }}
           path: android/${{ matrix.module }}/build/reports/androidTests/**
+  server-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: mtdewwolf/sloplex
+          ref: 0eeef57fe834a541581a0d7709be022816b5dbb6
+          path: server-source
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+          cache-dependency-path: server-source/go.mod
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install media tools
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Test actual Go server contract
+        run: python3 android/scripts/run-server-contracts.py --server-source server-source
