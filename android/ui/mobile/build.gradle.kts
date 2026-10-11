@@ -13,6 +13,7 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.coroutines.test)
     api(project(":feature:session"))
+    implementation(project(":ui:design"))
     implementation(libs.compose.material3)
     implementation(libs.compose.icons)
     implementation(libs.coil)

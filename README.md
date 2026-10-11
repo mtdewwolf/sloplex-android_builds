@@ -30,7 +30,7 @@ For account isolation and remote/proxied access, leave the server's `allowedNetw
 - Account-scoped Room metadata cache with bounded size, DataStore profiles, and server-authoritative browsing.
 - Home rows, libraries, collections, playlists, search, show/season/episode navigation, media versions, and watched state.
 - Shared Media3 direct/HLS playback, source-time resume/seek, track selection, quality limits, progress reporting, and conversion-session cleanup.
-- Distinct Material 3 adaptive phone/tablet UI and TV Material UI with remote navigation and TV launcher assets.
+- Cinematic dark and amber [design system](docs/android/design.md), adaptive Material 3 phone/tablet layouts, and TV Material UI with visible remote focus and matching launcher assets.
 
 Passwords are never persisted, tokens travel in headers, redirects are disabled, and TLS uses the system trust store. Downloads and short-code TV pairing are not implemented. There is no Node.js or Bun dependency in the Android runtime.
 

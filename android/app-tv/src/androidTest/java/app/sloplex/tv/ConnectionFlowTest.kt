@@ -2,11 +2,13 @@ package app.sloplex.tv
 
 import androidx.compose.ui.test.*
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import okhttp3.mockwebserver.*
 import org.junit.*
 import org.junit.Assert.*
 
+@OptIn(ExperimentalTestApi::class)
 class ConnectionFlowTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private lateinit var server: MockWebServer
@@ -31,26 +33,36 @@ class ConnectionFlowTest {
         server.start()
     }
     @After fun cleanup() { server.shutdown() }
+    // TV Material surfaces respond to remote keys rather than injected touch taps.
+    private fun pressRemote(node: SemanticsNodeInteraction) {
+        node.performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        compose.waitForIdle()
+        node.assertIsFocused()
+        node.performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.waitForIdle()
+    }
     @Test fun connectionLoginNavigationAndLogout() {
         compose.onNodeWithText("Server URL").performTextInput(server.url("/").toString())
-        compose.onNodeWithText("Enable private LAN HTTP").performClick()
-        compose.onNodeWithText("Connect",useUnmergedTree=true).performClick()
+        compose.onNodeWithText("Server URL").performImeAction()
+        pressRemote(compose.onNodeWithText("Enable private LAN HTTP"))
+        compose.onNodeWithText("Private LAN HTTP allowed").assertExists()
+        pressRemote(compose.onNodeWithText("Connect").performScrollTo())
         compose.waitUntil(45000) { compose.onAllNodesWithText("Username").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Username").performTextInput("alice")
         compose.onNodeWithText("Password").performTextInput("wonderland")
         compose.onNodeWithText("Password").performImeAction()
         compose.waitUntil(45000) { compose.onAllNodesWithText("Tonight starts here").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Home").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
-        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_DOWN)
+        compose.onNodeWithText("Home").performKeyInput { pressKey(Key.DirectionDown) }
         compose.onNodeWithText("Movies").assertIsFocused()
-        compose.onAllNodesWithText("Movies",useUnmergedTree=true).onLast().performClick()
+        pressRemote(compose.onNodeWithText("Movies"))
         compose.waitUntil(45000) { compose.onAllNodesWithText("Fixture movie").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Fixture movie").performClick()
+        pressRemote(compose.onNodeWithText("Fixture movie"))
         compose.waitUntil(45000) { compose.onAllNodesWithText("Mark watched").fetchSemanticsNodes().isNotEmpty() }
         androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
-        compose.onNodeWithText("Settings",useUnmergedTree=true).performClick()
+        pressRemote(compose.onNodeWithText("Settings"))
         compose.waitUntil(45000) { compose.onAllNodesWithText("Sign out",useUnmergedTree=true).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Sign out",useUnmergedTree=true).performClick()
+        pressRemote(compose.onNodeWithText("Sign out"))
         compose.waitUntil(45000) { compose.onAllNodesWithText("Username").fetchSemanticsNodes().isNotEmpty() }
     }
 }
