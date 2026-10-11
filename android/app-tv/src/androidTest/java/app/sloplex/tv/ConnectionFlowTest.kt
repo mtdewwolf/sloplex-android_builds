@@ -8,6 +8,7 @@ import okhttp3.mockwebserver.*
 import org.junit.*
 import org.junit.Assert.*
 
+@OptIn(ExperimentalTestApi::class)
 class ConnectionFlowTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private lateinit var server: MockWebServer

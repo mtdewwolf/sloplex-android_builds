@@ -217,7 +217,7 @@ import app.sloplex.ui.design.*
 }
 
 @Composable private fun Poster(item: MediaItem, vm: SessionViewModel, session: Session?, loader: ImageLoader, modifier: Modifier = Modifier, landscape: Boolean = false) {
-    Column(modifier.clip(MaterialTheme.shapes.medium).clickable(onClickLabel = "View ${item.title}") { vm.details(item) }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier.clickable(onClickLabel = "View ${item.title}") { vm.details(item) }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Box(Modifier.fillMaxWidth().aspectRatio(if (landscape) 16f / 9f else 2f / 3f).clip(MaterialTheme.shapes.medium)) {
             Artwork(item, session, loader, Modifier.fillMaxSize(), path = if (landscape) item.backdrop.ifBlank { item.poster } else item.poster)
             if (item.viewCount > 0) Surface(Modifier.align(Alignment.TopEnd).padding(8.dp), color = SloplexPalette.Background.copy(alpha = 0.9f), shape = CircleShape) { Icon(Icons.Default.Check, "Watched", Modifier.padding(4.dp).size(16.dp), tint = SloplexPalette.Accent) }
