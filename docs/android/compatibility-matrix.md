@@ -23,7 +23,8 @@ Backend audit pinned to `0aa2e5f0c52f0d30cd38f4e9dadcfe274a184ce2`. Minimum Andr
 | HEVC | direct only when installed decoder advertises size; HLS H.264 otherwise | profile/level and real decoder playback |
 | HDR10 / HLG | hdr=0 requests server SDR tone mapping | physical display/decoder and server ffmpeg matrix |
 | AAC stereo | direct when decoder available | audio focus and noisy interruption |
-| AC3 / DTS / TrueHD / multichannel | conservative stereo AAC HLS conversion | actual server decisions/output and audio routing |
+| AC3 / E-AC3 / Opus / FLAC, multichannel | direct when a decoder or passthrough output is available, otherwise HLS with copied H.264 video and stereo AAC | actual server decisions/output, downmix and audio routing |
+| DTS / TrueHD | HLS with copied H.264 video and stereo AAC | actual server decisions/output and audio routing |
 | Sidecar SRT/WebVTT/ASS/SSA | direct fetch as VTT; HLS server subtitle renditions | switch during playback and seek timing |
 | Embedded text subtitles | server VTT source or HLS rendition | selection mapping and duplicate language labels |
 | PGS/VobSub/image subtitles | server burn-in HLS | restarted source offset and subtitle timing |

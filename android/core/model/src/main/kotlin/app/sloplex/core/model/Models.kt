@@ -71,4 +71,4 @@ data class PlaybackTimeline(val sourceOffsetMs: Long = 0, val durationMs: Long =
     val offsetSeconds: String get() = java.math.BigDecimal.valueOf(sourceOffsetMs, 3).toPlainString()
 }
 enum class PlaybackMode { DIRECT, HLS }
-data class DeviceCapabilities(val videoCodecs: Set<String>, val audioCodecs: Set<String>, val width: Int = 1920, val height: Int = 1080)
+data class DeviceCapabilities(val videoCodecs: Set<String>, val audioCodecs: Set<String>, val width: Int = 1920, val height: Int = 1080, val maxAudioChannels: Int = 2)

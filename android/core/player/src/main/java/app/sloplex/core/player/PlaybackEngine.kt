@@ -7,6 +7,7 @@ import androidx.media3.common.*
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioCapabilities
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import app.sloplex.core.data.*
@@ -41,6 +42,9 @@ class PlaybackEngine @Inject constructor(@param:ApplicationContext private val c
     private var audio: Int? = null
     private var subtitle: Int? = null
     private var quality = Quality.ORIGINAL
+    /** Set after a failed conversion: re-encode H.264 the device could not decode when copied. */
+    private var encodeVideo = false
+    private val audioAttributes = AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build()
     private var lastReport = 0L
     private var ticker: Job? = null
     private var generation = 0L
@@ -49,7 +53,7 @@ class PlaybackEngine @Inject constructor(@param:ApplicationContext private val c
     private var resumePlaying = false
 
     suspend fun play(item: MediaItem, resumeMs: Long = item.viewOffset, mediaIndex: Int = 0) = withContext(Dispatchers.Main.immediate) {
-        backgrounded=false; version = mediaIndex; audio = null; subtitle = null; quality = Quality.ORIGINAL
+        backgrounded=false; version = mediaIndex; audio = null; subtitle = null; quality = Quality.ORIGINAL; encodeVideo = false
         start(item,resumeMs)
     }
     private fun decoders(media: MediaVersion): DeviceCapabilities {
@@ -58,8 +62,13 @@ class PlaybackEngine @Inject constructor(@param:ApplicationContext private val c
         val videos = map.filter { (_, mime) -> codecs.any { c ->
             runCatching { val v = c.getCapabilitiesForType(mime).videoCapabilities; v != null && v.isSizeSupported(media.width.coerceAtLeast(16), media.height.coerceAtLeast(16)) }.getOrDefault(false)
         } }.keys
-        val audios = mapOf("aac" to "audio/mp4a-latm", "mp3" to "audio/mpeg").filter { (_,mime) -> codecs.any { c -> c.supportedTypes.any { it.equals(mime,true) } } }.keys
-        return DeviceCapabilities(videos,audios,if(media.videoCodec in videos) media.width.coerceAtLeast(1920) else 1920,if(media.videoCodec in videos) media.height.coerceAtLeast(1080) else 1080)
+        val decoded = mapOf("aac" to MimeTypes.AUDIO_AAC, "mp3" to MimeTypes.AUDIO_MPEG, "ac3" to MimeTypes.AUDIO_AC3, "eac3" to MimeTypes.AUDIO_E_AC3, "opus" to MimeTypes.AUDIO_OPUS, "flac" to MimeTypes.AUDIO_FLAC)
+            .filter { (_,mime) -> codecs.any { c -> c.supportedTypes.any { it.equals(mime,true) } } }.keys
+        // AC3 and E-AC3 also play without a decoder when the output (HDMI, a receiver) accepts the bitstream.
+        val output = AudioCapabilities.getCapabilities(context,audioAttributes,null)
+        val passthrough = mapOf("ac3" to C.ENCODING_AC3, "eac3" to C.ENCODING_E_AC3).filter { (_,encoding) -> output.supportsEncoding(encoding) }.keys
+        // Android downmixes decoded multichannel PCM to the output, and passthrough carries every channel to the receiver.
+        return DeviceCapabilities(videos,decoded+passthrough,if(media.videoCodec in videos) media.width.coerceAtLeast(1920) else 1920,if(media.videoCodec in videos) media.height.coerceAtLeast(1080) else 1080,maxAudioChannels=8)
     }
     private suspend fun start(item: MediaItem, position: Long, forceHls: Boolean = false, shouldPlay: Boolean = true) = withContext(Dispatchers.Main.immediate) {
         val requestGeneration = ++generation
@@ -81,7 +90,7 @@ class PlaybackEngine @Inject constructor(@param:ApplicationContext private val c
             val caps = decoders(media)
             val parameters = mutableMapOf("path" to "/library/metadata/${item.ratingKey}", "mediaIndex" to version.toString(), "partIndex" to "0", "protocol" to "hls",
                 "containers" to "mp4,mkv,matroska,webm,mpegts,ts,m4v", "videoCodecs" to caps.videoCodecs.joinToString(",").ifBlank { "none" },
-                "audioCodecs" to caps.audioCodecs.joinToString(",").ifBlank { "none" }, "maxAudioChannels" to "2", "hdr" to "0", "directStream" to "0",
+                "audioCodecs" to caps.audioCodecs.joinToString(",").ifBlank { "none" }, "maxAudioChannels" to caps.maxAudioChannels.toString(), "hdr" to "0", "directStream" to if(encodeVideo) "0" else "1",
                 "videoResolution" to (quality.resolution ?: "${caps.width}x${caps.height}"), "directPlay" to if(forceHls || quality != Quality.ORIGINAL || media.videoCodec.isBlank() || media.width<=0 || media.height<=0) "0" else "1")
             audio?.let { parameters["audioStreamID"] = it.toString() }; subtitle?.let { parameters["subtitleStreamID"] = it.toString() }
             quality.bitrate?.let { parameters["maxVideoBitrate"] = it.toString() }
@@ -108,7 +117,7 @@ class PlaybackEngine @Inject constructor(@param:ApplicationContext private val c
             }
             val dataSource = DefaultDataSource.Factory(context, OkHttpDataSource.Factory(s.client.http))
             player = ExoPlayer.Builder(context).setMediaSourceFactory(DefaultMediaSourceFactory(dataSource)).build().apply {
-                setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),true)
+                setAudioAttributes(audioAttributes,true)
                 setHandleAudioBecomingNoisy(true)
                 trackSelectionParameters = trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT,selectedSub == null).build()
                 addListener(object: Player.Listener {
@@ -173,7 +182,11 @@ class PlaybackEngine @Inject constructor(@param:ApplicationContext private val c
         start(item,position,shouldPlay=player?.playWhenReady ?: state.value.playing)
     }
     suspend fun changeQuality(value: Quality) = withContext(Dispatchers.Main.immediate) { quality=value; current?.let { start(it,player?.let { p -> timeline.sourcePosition(p.currentPosition) } ?: state.value.positionMs,shouldPlay=player?.playWhenReady ?: state.value.playing) } }
-    suspend fun retry() = withContext(Dispatchers.Main.immediate) { current?.let { start(it,state.value.positionMs,forceHls=state.value.mode==PlaybackMode.DIRECT) } }
+    suspend fun retry() = withContext(Dispatchers.Main.immediate) {
+        // The server copies H.264 into HLS; if that failed too, the device cannot decode it (e.g. 10-bit), so encode it.
+        if(state.value.mode == PlaybackMode.HLS) encodeVideo = true
+        current?.let { start(it,state.value.positionMs,forceHls=state.value.mode==PlaybackMode.DIRECT) }
+    }
     fun toggle() { scope.launch { player?.let { if(it.isPlaying) it.pause() else it.play() } } }
     fun pause() { scope.launch { player?.pause() } }
     suspend fun background() = withContext(Dispatchers.Main.immediate) {
